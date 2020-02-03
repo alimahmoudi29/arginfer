@@ -6,7 +6,6 @@ import os
 import argbook
 import treeSequence
 
-
 class TestSegment(unittest.TestCase):
 
     def test_equal_samples(self):
@@ -233,8 +232,7 @@ class TestTreeSeq(unittest.TestCase):
                     r_break = math.ceil(edges_dict[parent2][0].left)
                     l_break = math.ceil(edges_dict[parent][-1].right)
                 #breakpoints
-                self.assertEqual(argnode[child].left_breakpoint,  l_break)
-                self.assertEqual(argnode[child].right_breakpoint,  r_break)
+                self.assertEqual(argnode[child].breakpoint,  l_break)
                 #assert left
                 self.assertEqual(argnode[parent].first_segment.left,  math.ceil(edges_dict[parent][0].left))
                 self.assertEqual(argnode[parent].get_tail().right,  math.ceil(edges_dict[parent][-1].right))
@@ -511,8 +509,7 @@ class TestARG(unittest.TestCase):
             else:
                 self.assertEqual(argnode[key].left_child, loaded_arg[key].left_child)
                 self.assertEqual(argnode[key].right_child, loaded_arg[key].right_child)
-            self.assertEqual(argnode[key].left_breakpoint, loaded_arg[key].left_breakpoint)
-            self.assertEqual(argnode[key].right_breakpoint, loaded_arg[key].right_breakpoint)
+            self.assertEqual(argnode[key].breakpoint, loaded_arg[key].breakpoint)
 
 if __name__=="__main__":
     unittest.main()

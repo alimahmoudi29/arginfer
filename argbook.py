@@ -127,18 +127,9 @@ class Node(object):
         self.first_segment = None
         self.snps = bintrees.AVLTree()
         self.time = None
-        self.left_breakpoint = None
-        self.right_breakpoint = None
+        self.breakpoint = None
         self.index = index
 
-    # def __str__(self):
-    #     nod = "({}: ch>{}-{}<p>{}-{}<-br-{}-{}: time={} snp={})".format(
-    #         self.index, self.left_child, self.right_child,
-    #         self.left_parent, self.right_parent,
-    #         self.left_breakpoint, self.right_breakpoint,
-    #         repr(self.time),
-    #         repr(self.snps))
-    #     return nod
 
     def contains(self, x):
         seg = self.first_segment
@@ -390,8 +381,7 @@ class ARG(object):
         node.right_child = right_child
         node.left_parent = None
         node.right_parent = None
-        node.left_breakpoint = None
-        node.right_breakpoint = None
+        node.breakpoint = None
         node.snps = bintrees.AVLTree()
         return node
 
@@ -455,7 +445,6 @@ class ARG(object):
         del self.nodes[oldname]
         self.nodes[newname] = node
 
-
     def total_branch_length(self):
         '''the ARG total branch length'''
         total_material = 0
@@ -480,8 +469,7 @@ class ARG(object):
         parent = node.left_parent
         sib.left_parent = parent.left_parent
         sib.right_parent = parent.right_parent
-        sib.left_breakpoint = parent.left_breakpoint
-        sib.right_breakpoint = parent.right_breakpoint
+        sib.breakpoint = parent.breakpoint
         grandparent = parent.left_parent
         if grandparent is not None:
             if grandparent.left_child.index == parent.index:
@@ -511,10 +499,8 @@ class ARG(object):
             assert u.left_parent.index == u.right_parent.index
             parent = u.left_parent
         parent.time = t
-        parent.left_breakpoint = v.left_breakpoint
-        parent.right_breakpoint = v.right_breakpoint
-        v.left_breakpoint = None
-        v.right_breakpoint = None
+        parent.breakpoint = v.breakpoint
+        v.breakpoint = None
         parent.left_parent = v.left_parent
         grandparent = v.left_parent
         if grandparent is not None:
@@ -585,9 +571,10 @@ class ARG(object):
                 while seg is not None:
                     total_material += ((seg.right - seg.left)* age)
                     seg = seg.next
-            if node.snps:
-                number_of_mutations += len(node.snps)
-                snp_nodes.append(node)
+                if node.snps:
+                    number_of_mutations += len(node.snps)
+                    snp_nodes.append(node)
+        print("number_of_mutations", number_of_mutations, "m", m)
         assert number_of_mutations == m # num of snps
         if theta == 0:
             if number_of_mutations == 0:
@@ -632,16 +619,10 @@ class ARG(object):
             if node.left_child.index == node.right_child.index: #rec
                 assert node.left_child.first_segment != None
                 ret -= rate * (node.time - time)
-                if node.left_child.right_breakpoint is not None: # Non-ancestral
-                    gap = node.left_child.right_breakpoint - node.left_child.left_breakpoint + 1
-                else:# ancestral
-                    gap =  1
-                if gap <= 0:
-                    raise ValueError("gap must be positive")
-                if rho == 0:
-                    ret -= float("inf")
-                else:
-                    ret += math.log(rho * gap)
+                gap = node.left_child.num_links()-\
+                      (node.left_child.left_parent.num_links() +
+                       node.left_child.right_parent.num_links())
+                ret += math.log(rho)
                 number_of_links -= gap
                 number_of_lineages += 1
                 counter += 2
@@ -667,97 +648,6 @@ class ARG(object):
             else:
                 counter += 1
         return ret
-
-    # def log_likelihood(self, theta):
-    #     '''
-    #     Depricated
-    #     log_likelihood of mutations on a given ARG up to a normalising constant
-    #      that depends on the pattern of observed mutations, but not on the ARG
-    #      or the mutation rate.
-    #      '''
-    #     snp_nodes = [] # nodes with len(snps) > 0
-    #     total_material = 0
-    #     number_of_mutations = 0
-    #     #get total matereial and nodes with snps
-    #     for node in self.nodes.values():
-    #         if node.left_parent is not None:
-    #             age = node.left_parent.time - node.time
-    #             seg = node.first_segment
-    #             while seg is not None:
-    #                 total_material += ((seg.right - seg.left)* age)
-    #                 seg = seg.next
-    #         if node.snps:
-    #             number_of_mutations += len(node.snps)
-    #             snp_nodes.append(node)
-    #     # assert number_of_mutations == len(data) # num of snps
-    #     if theta == 0:
-    #         if number_of_mutations == 0:
-    #             ret = 0
-    #         else:
-    #             ret = -float("inf")
-    #     else:
-    #         ret = (number_of_mutations * math.log(total_material * theta) -
-    #                total_material * theta)
-    #     # now calc prob of having this particular mutation pattern
-    #     for node in snp_nodes:
-    #         for x in node.snps:
-    #             potential_branch_length = node.tree_node_age(x)
-    #             ret += math.log(potential_branch_length / total_material)
-    #         # # verify the mutation is on the correct spot
-    #         # verify_mutation_node(node, data)
-    #     return ret
-
-
-    # def log_prior(self, sample_size, sequence_length, rho):
-    #     '''
-    #      Depricated
-    #      probability of the ARG under coalescen with recombination
-    #     1. order the nodes by time
-    #     2. '''
-    #     # order nodes by time
-    #     #TODO: find an efficient way to order nodes
-    #     ordered_nodes = [v for k, v in sorted(self.nodes.items(),
-    #                                  key = lambda item: item[1].time)]
-    #     number_of_lineages = sample_size
-    #     number_of_links = number_of_lineages * (sequence_length - 1)
-    #     number_of_nodes = self.__len__()
-    #     counter = sample_size
-    #     time  = 0
-    #     ret = 0
-    #     while counter < number_of_nodes:
-    #         node = ordered_nodes[counter]
-    #         assert node.time >= time # make sure it is ordered
-    #         rate = (number_of_lineages * (number_of_lineages - 1) / 2) + (number_of_links * rho)
-    #         ret -= rate * (node.time - time)
-    #         if node.left_child.index == node.right_child.index: # rec
-    #             if node.left_child.right_breakpoint is not None: # Non-ancestral
-    #                 gap = node.left_child.right_breakpoint - node.left_child.left_breakpoint + 1
-    #             else:# ancestral
-    #                 gap =  1
-    #             if gap <= 0:
-    #                 raise ValueError("gap must be positive")
-    #             if rho == 0:
-    #                 ret -= float("inf")
-    #             else:
-    #                 ret += math.log(rho * gap)
-    #             number_of_links -= gap
-    #             number_of_lineages += 1
-    #             counter += 2
-    #         elif node.left_parent is None:# CA + root
-    #             lchild_numlink = node.left_child.num_links()
-    #             rchild_numlink = node.right_child.num_links()
-    #             number_of_links -= (lchild_numlink + rchild_numlink)
-    #             number_of_lineages -= 2
-    #             counter += 1
-    #         else: #CA
-    #             node_numlink = node.num_links()
-    #             lchild_numlink = node.left_child.num_links()
-    #             rchild_numlink = node.right_child.num_links()
-    #             number_of_links -= (lchild_numlink + rchild_numlink) - node_numlink
-    #             number_of_lineages -= 1
-    #             counter += 1
-    #         time = node.time
-    #     return ret
 
     def dump(self, path =' ', file_name = 'arg.arg'):
         output = path + "/" + file_name
@@ -871,10 +761,10 @@ class MCMC(object):
         TODO: build an ARG for the given data.
         '''
         # To start I use the msprime output
-        recombination_rate=1e-8
+        recombination_rate = 1e-8
         Ne= 5000
         sample_size = 5
-        length = 9e4
+        length = 6e5
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne,
                                    length = length, mutation_rate = 1e-8,
                                    recombination_rate = recombination_rate,
@@ -888,6 +778,8 @@ class MCMC(object):
         self.log_lk = 0
         self.log_prior = 0
         self.Ne = 5000
+        self.n = sample_size
+        print("self.m", self.m)
         # --------
 
     def Metropolis_Hastings(self, new_log_lk, new_log_prior):
@@ -1112,72 +1004,22 @@ class MCMC(object):
             if s is None: # both parents are None
                 z = None
                 lhs_tail = None
-            elif node.right_breakpoint is None:# originally ancestral
-                y = self.find_break_seg(s, node.left_breakpoint)
+            else:
+                y = self.find_break_seg(s, node.breakpoint)
                 if y is not None: # parent2 is not empty
                     x = y.prev
-                    if y.contains(node.left_breakpoint):# new is ancestral
+                    if y.contains(node.breakpoint):# new is ancestral
                         # no forward + no reverse
-                        z = self.arg.alloc_segment(node.left_breakpoint, y.right,
+                        z = self.arg.alloc_segment(node.breakpoint, y.right,
                                                    node, y.samples, None, y.next)
                         if y.next is not None:
                             y.next.prev = z
                         y.next = None
-                        y.right = node.left_breakpoint
+                        y.right = node.breakpoint
                         lhs_tail = y
                     elif x is not None:
                         # no forward+ yes reverse
                         assert x.right is not y.left
-                        # node.left_breakpoint = x.right
-                        # node.right_breakpoint = y.left
-                        # #----- reverse transition prob
-                        # if not backtrack:
-                        #     self.transition_prob.spr_recomb_simulate(x.right, y.left, False)
-                        x.next = None
-                        y.prev = None
-                        z = y
-                        lhs_tail = x
-                    else: # first parent is empty
-                        # no update of breakpoint + no transition
-                        z = y
-                        lhs_tail = None
-                else: # second parent is empty
-                    # dont change the breakpoint no transition
-                    z = None
-                    lhs_tail = s
-            else: # original non-ancestral
-                # simulate a breakpoint
-                raise ValueError("not supported anymore")
-                break_point = random.choice(range(node.left_breakpoint,
-                                                  node.right_breakpoint + 1))
-                y = self.find_break_seg(s, break_point)
-                if y is not None:# parent 2 is not empty
-                    x = y.prev
-                    if y.contains(break_point):# new is ancestral
-                        # yes forward + no reverse
-                        #----- forward transition
-                        if not backtrack:
-                            self.transition_prob.spr_recomb_simulate(node.left_breakpoint,
-                                                                     node.right_breakpoint)
-                        node.left_breakpoint = break_point
-                        node.right_breakpoint = None
-                        z = self.arg.alloc_segment(break_point, y.right,
-                                                   node, y.samples, None, y.next)
-                        if y.next is not None:
-                            y.next.prev = z
-                        y.next = None
-                        y.right = break_point
-                        lhs_tail = y
-                    elif x.prev is not None:
-                        # yes forward + yes reverse:
-                        if not backtrack:
-                            self.transition_prob.spr_recomb_simulate(node.left_breakpoint,
-                                                                     node.right_breakpoint)
-                            self.transition_prob.spr_recomb_simulate(x.right, y.left, False)
-                        assert x.right is not y.left and \
-                               x.right <= break_point and break_point < y.left
-                        node.left_breakpoint = x.right
-                        node.right_breakpoint = y.left
                         x.next = None
                         y.prev = None
                         z = y
@@ -1398,7 +1240,6 @@ class MCMC(object):
                     all_reattachment_nodes[sib.index] = sib.index
                 all_reattachment_nodes.discard(node.index)
                 reattach = self.arg.nodes[random.choice(list(all_reattachment_nodes))]
-                print("all_reattachment_nodes", all_reattachment_nodes)
                 print("node", node.index, "rejoins to ", reattach.index)
                 #---trans_prob for choose reattach
                 self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes))
@@ -1561,11 +1402,9 @@ class MCMC(object):
                                                    0, True, False, self.lambd)
             self.floatings[sib.left_parent.time] = sib.index
             self.floatings_to_ckeck[sib.index] = sib.index
-            detach_grandparent = None
         else:
             self.transition_prob.spr_reattach_time(old_merger_time, max(detach.time, sib.time),
                                                 sib.left_parent.left_parent.time, False, False)
-            detach_grandparent = detach.left_parent.left_parent
         #---detach
         self.arg.detach(detach, sib)
         #--- update arg
@@ -1584,7 +1423,6 @@ class MCMC(object):
         all_reattachment_nodes = self.spr_reattachment_nodes(detach.time, False)
         all_reattachment_nodes.discard(detach.left_parent.index)
         all_reattachment_nodes.discard(detach.index)
-        print("all_reattachment_nodes after detach", all_reattachment_nodes)
         clean_nodes = collections.defaultdict(set) #key: time, value: nodes
         clean_nodes[detach.left_parent.time].add(detach.left_parent.index)
         if sib.left_parent is not None and sib.left_parent.index != detach.left_parent.index:
@@ -1706,24 +1544,19 @@ class MCMC(object):
 
     def print_state(self):
         print("node", "time", "left", "right", "l_chi", "r_chi", "l_par", "r_par",
-              "l_bp","r_bp", "snps", "fir_seg_sam",
+              "l_bp", "snps", "fir_seg_sam",
               sep="\t")
         for j in self.arg.nodes:
             node = self.arg.nodes[j]
             if node.left_parent is not None or node.left_child is not None:
-                # if node.left_parent is None:
-                #     print(j, "%.5f" % node.time, "Root", "Root", node.left_child.index,
-                #           node.right_child.index, "Root", "Root",
-                #           node.left_breakpoint, node.right_breakpoint,
-                #           node.snps, node.first_segment.samples, sep="\t")
-                # else:
+
                 s = node.first_segment
                 if s is None:
                     print(j, "%.5f" % node.time, "root", "root",
                               node.left_child.index,
                               node.right_child.index,
                               node.left_parent,node.right_parent,
-                              node.left_breakpoint, node.right_breakpoint,
+                              node.breakpoint,
                               node.snps ,None, sep="\t")
 
                 while s is not None:
@@ -1732,20 +1565,20 @@ class MCMC(object):
                     if node.left_child is None:
                         print(j, "%.5f" % node.time, l,r, "Leaf", "Leaf",
                               node.left_parent.index,node.right_parent.index,
-                              node.left_breakpoint,  node.right_breakpoint,
+                              node.breakpoint,
                               node.snps,  s.samples,  sep="\t")#
                     elif  node.left_parent is None:
                         print(j, "%.5f" % node.time, l, r,
                               node.left_child.index,
                               node.right_child.index, "Root", "Root",
-                              node.left_breakpoint, node.right_breakpoint,
+                              node.breakpoint,
                               node.snps ,s.samples, sep="\t")
                     else:
                         # print(node.time, node.index, int(l), int(r), node.left_child.index, node.right_child.index)
                         print( j, "%.5f" % node.time, l, r,
                              node.left_child.index, node.right_child.index,
                               node.left_parent.index, node.right_parent.index,
-                              node.left_breakpoint, node.right_breakpoint,
+                              node.breakpoint,
                               node.snps, s.samples, sep="\t")
                     s = s.next
 
@@ -1753,5 +1586,5 @@ if __name__ == "__main__":
     pass
     mcmc = MCMC()
     mcmc.spr()
-    mcmc.print_state()
+    # mcmc.print_state()
 

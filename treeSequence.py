@@ -91,7 +91,7 @@ class TreeSeq(object):
         assert s is not None
         if r_break == None:#  ancestral REC
             y = self.find_break(s, l_break)
-            y.node.left_breakpoint = l_break
+            y.node.breakpoint = l_break
             if y.prev is not None:
                 assert y.left <= l_break
             else:
@@ -106,13 +106,13 @@ class TreeSeq(object):
             y = self.find_break(s, r_break)
             x = y.prev
             break_point = random.choice(range(x.right, y.left + 1))
-            y.node.left_breakpoint = break_point
-            # y.node.left_breakpoint = x.right
-            # y.node.right_breakpoint = y.left
+            y.node.breakpoint = break_point
             x.next = None
             y.prev = None
             z = y
             lhs_tail = x
+        assert z is not None
+        assert lhs_tail is not None
         self.parent_nodes[p1] = lhs_tail
         self.parent_nodes[p2] = z
         # if z.node.left_child is not None and z.node.left_child.index == z.node.right_child.index:
@@ -208,6 +208,7 @@ class TreeSeq(object):
                 z = alpha
         if defrag_required:
             z.defrag_segment_chain()
+        assert node is not None
         if z is not None:
             z = z.get_first_segment()
             node.first_segment = z
@@ -230,23 +231,17 @@ class TreeSeq(object):
 
     def print_state(self):
         print("node", "time", "left", "right", "l_chi", "r_chi", "l_par", "r_par",
-              "l_bp","r_bp", "snps", "fir_seg_sam",
+              "l_bp", "snps", "fir_seg_sam",
               sep="\t")
         for j in self.arg.nodes:
             node = self.arg.nodes[j]
             if node.left_parent is not None or node.left_child is not None:
-                # if node.left_parent is None:
-                #     print(j, "%.5f" % node.time, "Root", "Root", node.left_child.index,
-                #           node.right_child.index, "Root", "Root",
-                #           node.left_breakpoint, node.right_breakpoint,
-                #           node.snps, node.first_segment.samples, sep="\t")
-                # else:
                 s = node.first_segment
                 if s is None:
                     print(j, "%.5f" % node.time, "root", "root",
                               node.left_child.index,
                               node.right_child.index, "Root", "Root",
-                              node.left_breakpoint, node.right_breakpoint,
+                              node.breakpoint,
                               node.snps ,None, sep="\t")
 
                 while s is not None:
@@ -255,20 +250,20 @@ class TreeSeq(object):
                     if node.left_child is None:
                         print(j, "%.5f" % node.time, l,r, "Leaf", "Leaf",
                               node.left_parent.index,node.right_parent.index,
-                              node.left_breakpoint,  node.right_breakpoint,
+                              node.breakpoint,
                               node.snps,  s.samples,  sep="\t")#
                     elif  node.left_parent is None:
                         print(j, "%.5f" % node.time, l, r,
                               node.left_child.index,
                               node.right_child.index, "Root", "Root",
-                              node.left_breakpoint, node.right_breakpoint,
+                              node.breakpoint,
                               node.snps ,s.samples, sep="\t")
                     else:
                         # print(node.time, node.index, int(l), int(r), node.left_child.index, node.right_child.index)
                         print( j, "%.5f" % node.time, l, r,
                              node.left_child.index, node.right_child.index,
                               node.left_parent.index, node.right_parent.index,
-                              node.left_breakpoint, node.right_breakpoint,
+                              node.breakpoint,
                               node.snps, s.samples, sep="\t")
                     s = s.next
 
