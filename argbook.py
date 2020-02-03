@@ -874,7 +874,7 @@ class MCMC(object):
         recombination_rate=1e-8
         Ne= 5000
         sample_size = 5
-        length = 6e4
+        length = 9e4
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne,
                                    length = length, mutation_rate = 1e-8,
                                    recombination_rate = recombination_rate,
@@ -997,7 +997,8 @@ class MCMC(object):
         s = nodes_to_update.pop(node_index)
         node = self.arg.nodes[node_index]
         if node.left_parent is None:
-            raise ValueError("The root node shouldn't be added "
+            if not backtrack:
+                raise ValueError("The root node shouldn't be added "
                              "to node_to_check at the first place")
         elif node.left_parent == node.right_parent:
             #common ancestor event
@@ -1127,11 +1128,11 @@ class MCMC(object):
                     elif x is not None:
                         # no forward+ yes reverse
                         assert x.right is not y.left
-                        node.left_breakpoint = x.right
-                        node.right_breakpoint = y.left
-                        #----- reverse transition prob
-                        if not backtrack:
-                            self.transition_prob.spr_recomb_simulate(x.right, y.left, False)
+                        # node.left_breakpoint = x.right
+                        # node.right_breakpoint = y.left
+                        # #----- reverse transition prob
+                        # if not backtrack:
+                        #     self.transition_prob.spr_recomb_simulate(x.right, y.left, False)
                         x.next = None
                         y.prev = None
                         z = y
@@ -1146,6 +1147,7 @@ class MCMC(object):
                     lhs_tail = s
             else: # original non-ancestral
                 # simulate a breakpoint
+                raise ValueError("not supported anymore")
                 break_point = random.choice(range(node.left_breakpoint,
                                                   node.right_breakpoint + 1))
                 y = self.find_break_seg(s, break_point)

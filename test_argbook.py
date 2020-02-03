@@ -6,6 +6,7 @@ import os
 import argbook
 import treeSequence
 
+
 class TestSegment(unittest.TestCase):
 
     def test_equal_samples(self):

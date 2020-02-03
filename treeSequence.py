@@ -105,8 +105,10 @@ class TreeSeq(object):
         else: # non ancestral REC
             y = self.find_break(s, r_break)
             x = y.prev
-            y.node.left_breakpoint = x.right
-            y.node.right_breakpoint = y.left
+            break_point = random.choice(range(x.right, y.left + 1))
+            y.node.left_breakpoint = break_point
+            # y.node.left_breakpoint = x.right
+            # y.node.right_breakpoint = y.left
             x.next = None
             y.prev = None
             z = y
