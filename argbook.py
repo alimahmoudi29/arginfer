@@ -290,7 +290,6 @@ class Node(object):
             seg = seg.next
         return node_variants
 
-
 class ARG(object):
     '''
     Ancestral Recombination Graph
@@ -550,7 +549,7 @@ class ARG(object):
         #             i += 1
 
     #========== probabilites
-    def log_likelihood(self, theta, m):
+    def log_likelihood(self, theta, data):
         '''
         log_likelihood of mutations on a given ARG up to a normalising constant
          that depends on the pattern of observed mutations, but not on the ARG
@@ -574,8 +573,8 @@ class ARG(object):
                 if node.snps:
                     number_of_mutations += len(node.snps)
                     snp_nodes.append(node)
-        print("number_of_mutations", number_of_mutations, "m", m)
-        assert number_of_mutations == m # num of snps
+        print("number_of_mutations", number_of_mutations, "m", len(data))
+        assert number_of_mutations == len(data) # num of snps
         if theta == 0:
             if number_of_mutations == 0:
                 ret = 0
@@ -590,7 +589,7 @@ class ARG(object):
                 potential_branch_length = node.tree_node_age(x)
                 ret += math.log(potential_branch_length / total_material)
             # # verify the mutation is on the correct spot
-            # verify_mutation_node(node, data)
+            verify_mutation_node(node, data)
         return ret
 
     def log_prior(self, sample_size, sequence_length, rho, Ne, NAM = True):
@@ -611,13 +610,17 @@ class ARG(object):
         counter = sample_size
         time  = 0
         ret = 0
+        rec_count =0
+        coal_count =0
         while counter < number_of_nodes:
             node = ordered_nodes[counter]
             assert node.time >= time # make sure it is ordered
-            rate = (number_of_lineages * (number_of_lineages - 1) / (2*2*Ne)) + (number_of_links * rho)
+            rate = (number_of_lineages * (number_of_lineages - 1) / (4*Ne)) + (number_of_links * rho)
             # ret -= rate * (node.time - time)
             if node.left_child.index == node.right_child.index: #rec
                 assert node.left_child.first_segment != None
+                assert node.left_child.left_parent.first_segment != None
+                assert node.left_child.right_parent.first_segment != None
                 ret -= rate * (node.time - time)
                 gap = node.left_child.num_links()-\
                       (node.left_child.left_parent.num_links() +
@@ -627,9 +630,10 @@ class ARG(object):
                 number_of_lineages += 1
                 counter += 2
                 time = node.time
+                rec_count += 1
             elif node.left_child.first_segment != None and\
                         node.right_child.first_segment != None:
-                ret -= rate * (node.time - time)
+                ret += (-(rate * (node.time - time)) - math.log(4*Ne))
                 if node.first_segment == None:
                     node_numlink = 0
                     number_of_lineages -= 2
@@ -642,6 +646,7 @@ class ARG(object):
                 rchild_numlink = node.right_child.num_links()
                 number_of_links -= (lchild_numlink + rchild_numlink) - node_numlink
                 time = node.time
+                coal_count += 1
                 if not NAM:
                     assert node.left_child.first_segment != None
                     assert node.right_child.first_segment != None
@@ -649,12 +654,12 @@ class ARG(object):
                 counter += 1
         return ret
 
-    def dump(self, path =' ', file_name = 'arg.arg'):
+    def dump(self, path = ' ', file_name = 'arg.arg'):
         output = path + "/" + file_name
         with open(output, "wb") as file:
             pickle.dump(self, file)
 
-    def load(self, path = '', file_name= 'arg.arg'):
+    def load(self, path = ' ', file_name = 'arg.arg'):
         output = path + "/" + file_name
         with open(output, "rb") as file:
             return pickle.load(file)
@@ -677,7 +682,7 @@ def verify_mutation_node(node, data):
         assert sorted(node_samples) == sorted(data[x])
 
 class TransProb(object):
-
+    '''transition probability calculation'''
     def __init__(self):
         self.spr_log_forward = 0
         self.spr_log_reverse = 0
@@ -752,9 +757,9 @@ class MCMC(object):
         self.floatings_to_ckeck = bintrees.AVLTree()#key index, value: index; this is for checking new roots
         self.new_names = bintrees.AVLTree()# index:index, of the new names (new parent indexes)
         self.arg.nextname = max(self.arg.nodes) + 1
-        self.log_lk = self.arg.log_likelihood(self.theta, self.m)
+        self.log_lk = self.arg.log_likelihood(self.theta, self.data)
         self.log_prior = self.arg.log_prior(self.n, self.seq_length, self.rho, self.Ne)
-        self.lambd = 1/self.Ne # lambd in expovariate
+        self.lambd = 1/(4*self.Ne) # lambd in expovariate
 
     def get_initial_arg(self):
         '''
@@ -762,9 +767,9 @@ class MCMC(object):
         '''
         # To start I use the msprime output
         recombination_rate = 1e-8
-        Ne= 5000
+        Ne = 5000
         sample_size = 5
-        length = 6e5
+        length = 6e2
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne,
                                    length = length, mutation_rate = 1e-8,
                                    recombination_rate = recombination_rate,
@@ -779,11 +784,9 @@ class MCMC(object):
         self.log_prior = 0
         self.Ne = 5000
         self.n = sample_size
-        print("self.m", self.m)
         # --------
 
     def Metropolis_Hastings(self, new_log_lk, new_log_prior):
-
         ratio = new_log_lk + new_log_prior + self.transition_prob.spr_log_reverse - \
                 (self.log_lk + self.log_prior + self.transition_prob.spr_log_forward)
         print("self.transition_prob.spr_log_reverse", self.transition_prob.spr_log_reverse)
@@ -878,7 +881,7 @@ class MCMC(object):
             symD_A = D.difference(A)
             if len(symD_A) > 0: # incompatible
                 ret = False
-        return ret
+        return ret, detach_snps
 
     def update_ancestral_material(self, node_index, nodes_to_update,
                                   nodesToUpdateTimes, backtrack = False):
@@ -1008,18 +1011,21 @@ class MCMC(object):
                 y = self.find_break_seg(s, node.breakpoint)
                 if y is not None: # parent2 is not empty
                     x = y.prev
-                    if y.contains(node.breakpoint):# new is ancestral
+                    if y.left < node.breakpoint < y.right:#y.contains(node.breakpoint):# new is ancestral
                         # no forward + no reverse
                         z = self.arg.alloc_segment(node.breakpoint, y.right,
                                                    node, y.samples, None, y.next)
+                        assert node.breakpoint < y.right
                         if y.next is not None:
                             y.next.prev = z
                         y.next = None
                         y.right = node.breakpoint
+                        assert y.left < node.breakpoint
                         lhs_tail = y
                     elif x is not None:
                         # no forward+ yes reverse
-                        assert x.right is not y.left
+                        # assert x.right is not y.left
+                        assert x.right <= node.breakpoint <= y.left
                         x.next = None
                         y.prev = None
                         z = y
@@ -1053,7 +1059,6 @@ class MCMC(object):
             # self.R[node.index] = node.index
             # self.arg.rec[node.index] = node.index
         return nodes_to_update, nodesToUpdateTimes
-
     def get_detach_SF(self, detach):
         '''get snps from detach
          that we need to check for incompatibility
@@ -1135,7 +1140,7 @@ class MCMC(object):
                     node.right_parent.first_segment == None:
                     valid = False
                     break
-                assert  not self.new_names.__contains__(node.left_parent.index)
+                assert not self.new_names.__contains__(node.left_parent.index)
                 original_parent = node.left_parent
                 if node.left_child.index == path[-1]:
                     #sec child is the second child of the last node berfore original_p
@@ -1152,9 +1157,9 @@ class MCMC(object):
                 if node.index == original_parent.left_child:
                     second_child = original_parent.right_child
                 else:
-                    original_parent = original_parent.left_child
+                    second_child = original_parent.left_child
                 break
-        return original_parent, valid , second_child
+        return original_parent, valid, second_child
 
     def find_original_child(self, node, second_child = False):
         '''find the original child for node, the child in the original ARG
@@ -1188,7 +1193,6 @@ class MCMC(object):
                     node = node.right_child
                 else:
                     node = node.left_child
-
         return original_child
 
     def is_new_root(self, node):
@@ -1197,6 +1201,12 @@ class MCMC(object):
          the reverse move?
          return original_parent and original_child. if both are not None, then yes node is
          a new root and need to calculate the reverse prob for that. otherwise, No!
+         by original parent or original child, I mean the parent/child that
+         exist in the original ARG.
+         If a node doesnt have an original parent:
+            1. it was a root in G_{j}
+            2. it is a result of floating lineages, then no need to calc reverse
+
          '''
         original_child = None
         original_parent = None
@@ -1206,13 +1216,13 @@ class MCMC(object):
                 node.right_child.first_segment != None:
             # find original parent
             original_parent, valid, second_child = self.find_original_parent(node)
-            if original_parent != None:
+            if valid and original_parent != None:
                 #now find original child
                 original_child = self.find_original_child(node)
         return original_parent, original_child, valid, second_child
 
     def spr_reattach_floatings(self, detach, sib, old_merger_time):
-        '''reattach all the floatings'''
+        '''reattach all the floatings including detach'''
         while self.floatings:
             min_time = self.floatings.min_key()
             node = self.arg.nodes[self.floatings[min_time]]
@@ -1372,6 +1382,88 @@ class MCMC(object):
         self.arg.coal = self.arg.coal.difference(coal_to_cleanup)
         return coal_to_cleanup
 
+    def spr_validity_check(self, node,  clean_nodes, detach_snps, detach):
+        '''after rejoining all the floating, it is time to check if
+        the changes cancels any recombination.
+        Also, if there is a new root (node.segment == None and node.left_parent!=None),
+        calculate the reverse prob for them.
+        In addition, whether there is a incompatibility.
+        This method is responsible for checking the above mentioned for node.
+        :param node: the node we need to check its validability and revers prob (if applicable)
+        :param detach: the detach node in spr
+        :param clean_nodes: a dict of k: time, v: node.indexes the nodes we need to check for validity
+        '''
+        valid = True
+        if node.first_segment != None:# not a new root
+            assert node.left_parent != None
+            # check incompatibility if both children have segments
+            if node.left_child.index != node.right_child.index:
+                # first delete all the detach_snps in node.snps
+                for item in detach_snps:
+                    node.snps.discard(item)
+                #find all SNP on left_child
+                lc_variants = node.left_child.get_variants(self.data)
+                #find all SNP on right child
+                rc_variants = node.right_child.get_variants(self.data)
+                # find the intersection of them
+                intersect_variants = detach_snps.intersection(lc_variants, rc_variants)
+                for snp in intersect_variants:
+                    S1 = node.left_child.x_segment(snp).samples
+                    S2 = node.right_child.x_segment(snp).samples
+                    valid, detach_snps = self.incompatibility_check(node, S1, S2, snp, detach_snps)
+                    if not valid:
+                        break
+            else:
+                assert len(node.snps) == 0
+            clean_nodes[node.left_parent.time].add(node.left_parent.index)
+            clean_nodes[node.right_parent.time].add(node.right_parent.index)
+            #add the parents to the clean_node
+        elif node.left_parent != None:
+            if node.left_parent.index != node.right_parent.index:
+                valid = False
+            elif node.left_child.index == node.right_child.index:
+                valid = False
+            else:
+                # might be new root
+                # is it really new root?
+                original_parent, original_child, valid, second_child = self.is_new_root(node)
+                # if we have original parent and original child
+                # the floating will be from node.time and rejoins to original.parent.time
+                # reverse: choose original parent, choose time on
+                # original_parent's second_child.time to original parent.left_parent.time
+                # then add what to clean_up? node.left_parent, since we need to check incompatibility
+                # without considering incompatibility then original_parent.
+                #second child is the second child of the original_parent. we need to find its original child
+                # and original parent (if any) for the time prob calculation
+                if valid and original_parent != None and original_child != None:
+                    all_reattachment_nodes = self.spr_reattachment_nodes(node.time, False)
+                    all_reattachment_nodes.discard(original_parent.index)
+                    all_reattachment_nodes.discard(node.index)
+                    # ---- reverse of choosin g a lineage to rejoin
+                    self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes), False)
+                    #----- reverse prob time
+                    if node.index != detach.index:# already done for detach
+                        # find the origin child and origin parent of second child (if any)
+                        sc_origin_child = self.find_original_child(second_child, True)
+                        assert sc_origin_child is not None
+                        if second_child.left_parent.index == original_parent.index:
+                            # find original parent for second child
+                            sc_original_parent, valid = self.find_sc_original_parent(second_child)
+                        else:
+                            # original parent is a parent of a rec then:
+                            sc_original_parent = original_parent
+                        if valid:
+                            if sc_original_parent is None:
+                                self.transition_prob.spr_reattach_time(original_parent.time,
+                                        max(node.time, second_child.time), 0 , True, False)
+                            else:
+                                self.transition_prob.spr_reattach_time(original_parent.time,
+                                        max(node.time, second_child.time), sc_original_parent.time
+                                                                       , False, False)
+                # add nodeleft parent ot cleanup
+                clean_nodes[node.left_parent.time].add(node.left_parent.index)
+        return valid, clean_nodes, detach_snps
+
     def spr(self):
         '''perform an SPR move on the ARG'''
         # Choose a random coalescence node, and one of its children to detach.
@@ -1395,7 +1487,7 @@ class MCMC(object):
         old_merger_time = detach.left_parent.time
         print("detach node", detach.index, " time", detach.time)
         sib = detach.sibling()
-        print("sibling node", sib.index)
+        print("sibling node", sib.index, "parent", detach.left_parent.index)
         #-- reverse transition for time
         if detach.left_parent.left_parent is None:
             self.transition_prob.spr_reattach_time(old_merger_time, max(detach.time, sib.time),
@@ -1427,6 +1519,7 @@ class MCMC(object):
         clean_nodes[detach.left_parent.time].add(detach.left_parent.index)
         if sib.left_parent is not None and sib.left_parent.index != detach.left_parent.index:
             clean_nodes[sib.left_parent.time].add(sib.left_parent.index)
+            clean_nodes[sib.right_parent.time].add(sib.right_parent.index)# if rec
         else: # sib is a root with seg = None and left_parent  = None
             all_reattachment_nodes[sib.index] = sib.index
         self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes), False)
@@ -1442,92 +1535,20 @@ class MCMC(object):
                 assert nodes[0].left_child.index == nodes[1].left_child.index
                 if nodes[0].first_segment is None or nodes[1].first_segment is None:
                     valid = False # cancels a rec
-                    nodes = []
                     break
             else:
                 assert len(nodes) == 1
                 nodes = [self.arg.nodes[nodes.pop()]]
             while nodes:
                 node = nodes.pop(0)
-                if node.first_segment != None:# not a new root
-                    assert node.left_parent != None
-                    # check incompatibility if both children have segments
-                    if node.left_child.index != node.right_child.index:
-                        # first delete all the detach_snps in node.snps
-                        for item in detach_snps:
-                            node.snps.discard(item)
-                        #find all SNP on left_child
-                        lc_variants = node.left_child.get_variants(self.data)
-                        #find all SNP on right child
-                        rc_variants = node.right_child.get_variants(self.data)
-                        # find the intersection of them
-                        intersect_variants = detach_snps.intersection(lc_variants, rc_variants)
-                        for snp in intersect_variants:
-                            S1 = node.left_child.x_segment(snp).samples
-                            S2 = node.right_child.x_segment(snp).samples
-                            valid = self.incompatibility_check(node, S1, S2, snp, detach_snps)
-                            if not valid:
-                                break
-                    else:
-                        assert len(node.snps) == 0
-                    clean_nodes[node.left_parent.time].add(node.left_parent.index)
-                    clean_nodes[node.right_parent.time].add(node.right_parent.index)
-                    #add the parents to the clean_node
-                elif node.left_parent != None:
-                    if node.left_parent.index != node.right_parent.index:
-                        valid = False
-                        break
-                    elif node.left_child.index == node.right_child.index:
-                        valid = False
-                        break
-                    else:
-                        # might be new root
-                        # is it really new root?
-                        original_parent, original_child, valid, second_child = self.is_new_root(node)
-                        # if we have original parent and original child
-                        # the floating will be from node.time and rejoins to original.parent.time
-                        # reverse: choose original parent, choose time on
-                        # original_parent's second_child.time to original parent.left_parent.time
-                        # then add what to clean_up? node.left_parent, since we need to check incompatibility
-                        # without considering incompatibility then original_parent.
-                        #second child is the second child of the original_parent. we need to find its original child
-                        # and original parent (if any) for the time prob calculation
-                        if not valid:
-                            break
-                        elif original_parent != None and original_child != None:
-                            all_reattachment_nodes = self.spr_reattachment_nodes(node.time, False)
-                            all_reattachment_nodes.discard(original_parent.index)
-                            all_reattachment_nodes.discard(node.index)
-                            # ---- reverse of choosin g a lineage to rejoin
-                            self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes), False)
-                            #----- reverse prob time
-                            if node.index != detach.index:# already done for detach
-                                # find the origin child and origin parent of second child (if any)
-                                sc_origin_child = self.find_original_child(node, True)
-                                assert sc_origin_child is not None
-                                if second_child.left_parent.index == original_parent.index:
-                                    # find original parent for second child
-                                    sc_original_parent, valid = self.find_sc_original_parent(second_child)
-                                    if not valid:
-                                        break
-                                else:
-                                    # original parent is a parent of a rec then:
-                                    sc_original_parent = original_parent
-                                if sc_original_parent is None:
-                                    self.transition_prob.spr_reattach_time(original_parent.time,
-                                            max(node.time, second_child.time), 0 , True, False)
-                                else:
-                                    self.transition_prob.spr_reattach_time(original_parent.time,
-                                            max(node.time, second_child.time), sc_original_parent.time
-                                                                           , False, False)
-                        # add nodeleft parent ot cleanup
-                        clean_nodes[node.left_parent.time].add(node.left_parent.index)
-        # if valid --- calc the prior and the likelihood
-        # valid = False
+                valid, clean_nodes, detach_snps = self.spr_validity_check(node,
+                                                            clean_nodes, detach_snps, detach)
+                if not valid:
+                    break
         print("valid is ", valid)
         if valid:
             #-- calc prior and likelihood and then M-H
-            new_log_lk = self.arg.log_likelihood(self.theta, self.m)
+            new_log_lk = self.arg.log_likelihood(self.theta, self.data)
             new_log_prior = self.arg.log_prior(self.n, self.seq_length, self.rho, self.Ne)
             mh_accept = self.Metropolis_Hastings(new_log_lk, new_log_prior)
             print("mh_accept ", mh_accept)
@@ -1585,6 +1606,7 @@ class MCMC(object):
 if __name__ == "__main__":
     pass
     mcmc = MCMC()
-    mcmc.spr()
     # mcmc.print_state()
+    mcmc.spr()
+    mcmc.print_state()
 

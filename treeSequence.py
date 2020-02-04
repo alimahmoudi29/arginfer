@@ -97,16 +97,19 @@ class TreeSeq(object):
             else:
                 assert y.left < l_break
             z = self.arg.alloc_segment(l_break, y.right, y.node, y.samples, None, y.next)
+            assert l_break < y.right
             if y.next is not None:
                 y.next.prev = z
             y.next = None
             y.right = l_break
+            assert  y.left < l_break
             lhs_tail = y
         else: # non ancestral REC
             y = self.find_break(s, r_break)
             x = y.prev
             break_point = random.choice(range(x.right, y.left + 1))
             y.node.breakpoint = break_point
+            assert x.right <= break_point <= y.left
             x.next = None
             y.prev = None
             z = y
@@ -168,9 +171,11 @@ class TreeSeq(object):
                 if x is not None:
                     alpha = x
                     x = None
+                    assert alpha.left < alpha.right
                 if y is not None:
                     alpha = y
                     y = None
+                    assert alpha.left < alpha.right
             else:
                 if y.left < x.left:
                     beta = x
@@ -180,14 +185,17 @@ class TreeSeq(object):
                     alpha = x
                     x = x.next
                     alpha.next = None
+                    assert alpha.left < alpha.right
                 elif x.left != y.left:
                     alpha = self.arg.alloc_segment(x.left, y.left, node, x.samples)
                     x.left = y.left
+                    assert alpha.left < alpha.right
                 else:
                     left = x.left
                     r_max = min(x.right, y.right)
                     right = r_max
                     alpha = self.arg.alloc_segment(left, right, node, x.union_samples(y))
+                    assert alpha.left < alpha.right
                     if alpha.is_mrca(self.n):
                         alpha = None
                     if x.right == right:
