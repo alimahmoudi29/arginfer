@@ -223,6 +223,7 @@ class TreeSeq(object):
             self.arg.store_node(z, node)
         else:
             self.arg.add(node)
+            self.arg.roots[node.index] = node.index
 
     def map_mutation(self):
         '''returns a list of mutation positions where where the index
@@ -311,6 +312,7 @@ def test_run():
     tsarg= TreeSeq(ts_full)
     tsarg.ts_to_argnode()
     tsarg.print_state()
+
 
 
 if __name__ == "__main__":

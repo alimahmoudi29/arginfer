@@ -1,2 +1,2 @@
 # ARGinfer
-inferring Ancestral Recombination Graph 
+Inferring Ancestral Recombination Graph

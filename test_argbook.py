@@ -5,6 +5,7 @@ import msprime
 import os
 import argbook
 import treeSequence
+import bintrees
 
 class TestSegment(unittest.TestCase):
 
@@ -319,11 +320,25 @@ class TestARG(unittest.TestCase):
         tsarg= treeSequence.TreeSeq(ts_full)
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
+        data = treeSequence.get_arg_genotype(ts_full)
+
         # put some mutations on some nodes
         argnode[6].snps.__setitem__(101, 101)
         argnode[6].snps.__setitem__(10, 10)
         argnode[3].snps.__setitem__(20, 20)
         argnode[9].snps.__setitem__(448, 448)
+        a = bintrees.AVLTree()
+        a.update({2:2, 4:4})
+        data[10] = a
+        a = bintrees.AVLTree()
+        a.update({2:2, 4:4})
+        data[101] = a
+        a = bintrees.AVLTree()
+        a.update({3:3})
+        data[20] = a
+        a = bintrees.AVLTree()
+        a.update({2:2, 4:4, 3:3})
+        data[448] = a
         #print
         nodes_with_mutation = []
         for node in argnode.nodes.values():
@@ -362,7 +377,7 @@ class TestARG(unittest.TestCase):
                                          ts_full.tables.nodes.time[9]) / total_material)#x=448 , node=9
         #----- log likelihood function
         self.assertTrue(math.isclose(
-                            true_log_likelihood, argnode.log_likelihood(theta, m)))
+                            true_log_likelihood, argnode.log_likelihood(theta, data)))
 
     def test_log_prior(self):
         recombination_rate=1e-8
@@ -380,12 +395,13 @@ class TestARG(unittest.TestCase):
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
         #ca node =5
         true_log_prior = 0
-        true_log_prior  -= rate * (ts_full.tables.nodes.time[5] - 0)
+        true_log_prior  -= rate * (ts_full.tables.nodes.time[5] - 0) + math.log(4*Ne)
         num_link -= 599
         k = 4
         # ca, node =6
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
-        true_log_prior  -= rate * (ts_full.tables.nodes.time[6] - ts_full.tables.nodes.time[5])
+        true_log_prior  -= rate * (ts_full.tables.nodes.time[6] - ts_full.tables.nodes.time[5])+\
+                                 math.log(4*Ne)
         num_link -= 599
         k = 3
         #rec nodes 7, 8
@@ -397,7 +413,8 @@ class TestARG(unittest.TestCase):
         k = 4
         # CA , node = 9
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
-        true_log_prior  -= rate * (ts_full.tables.nodes.time[9] - ts_full.tables.nodes.time[8])
+        true_log_prior  -= rate * (ts_full.tables.nodes.time[9] - ts_full.tables.nodes.time[8]) +\
+                                     math.log(4*Ne)
         num_link -= 553
         k = 3
         #Rec , nodes = 10, 11
@@ -409,17 +426,20 @@ class TestARG(unittest.TestCase):
         k = 4
         # CA, node= 12
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
-        true_log_prior  -= rate * (ts_full.tables.nodes.time[12] - ts_full.tables.nodes.time[10])
+        true_log_prior  -= rate * (ts_full.tables.nodes.time[12] - ts_full.tables.nodes.time[10]) +\
+                                                                             math.log(4*Ne)
         num_link += 1
         k = 3
         # CA , node = 13
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
-        true_log_prior  -= rate * (ts_full.tables.nodes.time[13] - ts_full.tables.nodes.time[12])
+        true_log_prior  -= rate * (ts_full.tables.nodes.time[13] - ts_full.tables.nodes.time[12])+\
+                                                                                 math.log(4*Ne)
         num_link -= 45
         k = 2
         # CA, node 14
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
-        true_log_prior  -= rate * (ts_full.tables.nodes.time[14] - ts_full.tables.nodes.time[13])
+        true_log_prior  -= rate * (ts_full.tables.nodes.time[14] - ts_full.tables.nodes.time[13])+\
+                                                                         math.log(4*Ne)
         num_link -= (599 + 599)
         k = 1
         #----- compare
@@ -511,6 +531,88 @@ class TestARG(unittest.TestCase):
                 self.assertEqual(argnode[key].right_child, loaded_arg[key].right_child)
             self.assertEqual(argnode[key].breakpoint, loaded_arg[key].breakpoint)
 
+
+class TestMCMC(unittest.TestCase):
+
+    def test_detach_update(self):
+        '''detach a node and then update ancestral material
+        RE: (2)b=5--> (3, 4),   t= 1.5
+        CA: (3, 4)-->   6,      t= 2.5
+        CA: (0, 1)-->   5,      t= 3.5
+        CA: (5, 6)-->   7,      t= 4.5
+        '''
+        arg = argbook.ARG()
+        arg.nodes[0] = argbook.Node(0); arg.nodes[0].first_segment = argbook.Segment()
+        arg.nodes[1] = argbook.Node(1); arg.nodes[1].first_segment = argbook.Segment()
+        arg.nodes[2] = argbook.Node(2); arg.nodes[2].first_segment = argbook.Segment()
+        arg.nodes[0].time = 0 ; arg.nodes[1].time = 0 ; arg.nodes[2].time = 0
+        #--------- n = 3 , m=0 , seq length =10
+        arg.nodes[0].first_segment.left = 0; arg.nodes[0].first_segment.right = 10
+        arg.nodes[1].first_segment.left = 0; arg.nodes[1].first_segment.right = 10
+        arg.nodes[2].first_segment.left = 0; arg.nodes[2].first_segment.right = 10
+        arg.nodes[0].first_segment.samples.__setitem__(0, 0)
+        arg.nodes[1].first_segment.samples.__setitem__(1, 1)
+        arg.nodes[2].first_segment.samples.__setitem__(2, 2)
+        #----rec on 2 at b= 5
+        arg.nodes[3] = argbook.Node(3); arg.nodes[3].first_segment = argbook.Segment()
+        arg.nodes[3].first_segment.left = 0; arg.nodes[3].first_segment.right = 5
+        arg.nodes[3].left_child = arg.nodes[2]; arg.nodes[3].right_child = arg.nodes[2]
+        arg.nodes[3].first_segment.samples.__setitem__(2, 2)
+        arg.nodes[4] = argbook.Node(4); arg.nodes[4].first_segment = argbook.Segment()
+        arg.nodes[4].first_segment.left = 5; arg.nodes[4].first_segment.right = 10
+        arg.nodes[4].left_child = arg.nodes[2]; arg.nodes[4].right_child = arg.nodes[2]
+        arg.nodes[4].first_segment.samples.__setitem__(2, 2)
+        arg.nodes[2].left_parent = arg.nodes[3]; arg.nodes[2].right_parent = arg.nodes[4]
+        arg.nodes[2].breakpoint = 5; arg.nodes[3].time = 1.5 ; arg.nodes[4].time = 1.5
+        #------ CA (3,4 ) ---6
+        arg.nodes[6] = argbook.Node(6); arg.nodes[6].first_segment = argbook.Segment()
+        arg.nodes[6].first_segment.left = 0; arg.nodes[6].first_segment.right = 10
+        arg.nodes[6].left_child = arg.nodes[3]; arg.nodes[6].right_child = arg.nodes[4]
+        arg.nodes[6].first_segment.samples.__setitem__(2, 2)
+        arg.nodes[6].time = 2.5
+        arg.nodes[3].left_parent = arg.nodes[6]; arg.nodes[3].right_parent = arg.nodes[6]
+        arg.nodes[4].left_parent = arg.nodes[6]; arg.nodes[4].right_parent = arg.nodes[6]
+        #-------- CA (0,1 ) ---> 5
+        arg.nodes[5] = argbook.Node(5); arg.nodes[5].first_segment = argbook.Segment()
+        arg.nodes[5].first_segment.left = 0; arg.nodes[5].first_segment.right = 10
+        arg.nodes[5].left_child = arg.nodes[0]; arg.nodes[5].right_child = arg.nodes[1]
+        arg.nodes[5].first_segment.samples.update({0:0, 1:1})
+        arg.nodes[5].time = 3.5
+        arg.nodes[0].left_parent = arg.nodes[5]; arg.nodes[0].right_parent = arg.nodes[5]
+        arg.nodes[1].left_parent = arg.nodes[5]; arg.nodes[1].right_parent = arg.nodes[5]
+
+        #--- CA (5, 6) ---7
+        arg.nodes[7] = argbook.Node(7); arg.nodes[7].first_segment = argbook.Segment()
+        arg.nodes[7].left_child = arg.nodes[5]; arg.nodes[7].right_child = arg.nodes[6]
+        arg.nodes[7].time = 4.5
+        arg.nodes[5].left_parent = arg.nodes[7]; arg.nodes[5].right_parent = arg.nodes[7]
+        arg.nodes[6].left_parent = arg.nodes[7]; arg.nodes[6].right_parent = arg.nodes[7]
+        #-------
+        mcmc = argbook.MCMC()
+        mcmc.arg = arg
+        mcmc.arg.coal.update({5:5, 6:6 , 7:7})
+        mcmc.arg.rec.update({3:3, 4:4 })
+        mcmc.data = {}
+        mcmc.n = 3
+        mcmc.m = 0
+        mcmc. seq_length = 10
+        mcmc.print_state()
+        # -- - - - -
+        detach = mcmc.arg.nodes[6]
+        old_merger_time = detach.left_parent.time
+        sib = mcmc.arg.nodes[6].sibling()
+        mcmc.arg.detach(detach, sib)
+
+        #--- parent is root --> add both to floating
+        mcmc.floatings[detach.time] = detach.index
+        mcmc.floatings[detach.left_parent.time] = sib.index
+        assert sib.left_parent is None
+        if sib.left_parent is not None:
+            mcmc.update_all_ancestral_material(sib)
+        mcmc.spr_reattach_floatings(detach, sib, old_merger_time)
+        print("coal", mcmc.arg.coal)
+        mcmc.print_state()
+        mcmc.spr()
 if __name__=="__main__":
     unittest.main()
 
