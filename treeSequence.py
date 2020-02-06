@@ -96,7 +96,8 @@ class TreeSeq(object):
                 assert y.left <= l_break
             else:
                 assert y.left < l_break
-            z = self.arg.alloc_segment(l_break, y.right, y.node, y.samples, None, y.next)
+            z = self.arg.alloc_segment(l_break, y.right, y.node,
+                                       y.samples, None, y.next)
             assert l_break < y.right
             if y.next is not None:
                 y.next.prev = z
@@ -126,7 +127,8 @@ class TreeSeq(object):
         # delete those recombination nodes which are not. Will have to be done once the
         # ARG has been constructed by checking which ones will violate snps
 
-        node = self.arg.alloc_node(self.arg.new_name(), time, lhs_tail.node, lhs_tail.node)
+        node = self.arg.alloc_node(self.arg.new_name(), time,
+                                   lhs_tail.node, lhs_tail.node)
         lhs_tail.node.left_parent = node
         if self.mutation_map[node.index]:
             self.add_mutation(node)
