@@ -315,8 +315,6 @@ def test_run():
     tsarg.ts_to_argnode()
     tsarg.print_state()
 
-
-
 if __name__ == "__main__":
     test_run()
 
