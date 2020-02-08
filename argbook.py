@@ -8,6 +8,7 @@ import random
 import pickle
 import numpy as np
 import collections
+import time
 # import compress_pickle
 # import zipfile
 import sys
@@ -233,14 +234,15 @@ class Node(object):
         Find and return the sibling node of u
         where u is a child of a CA
         '''
-        u = self
-        assert u.left_parent is not None
-        assert u.left_parent.index == u.right_parent.index
-        p = u.left_parent
+        assert self.left_parent is not None
+        assert self.left_parent.index == self.right_parent.index
+        p = self.left_parent
         v = p.left_child
-        if v.index == u.index:
+        if v.index == self.index:
             v = p.right_child
-        assert v.index is not u.index
+
+        if v.index == self.index:
+            assert v.index is not self.index
         return v
 
     def push_snp_down(self, x):
@@ -316,25 +318,25 @@ class ARG(object):
         '''number of nodes'''
         return len(self.nodes)
 
-    def __getitem__(self, name):
+    def __getitem__(self, index):
         '''returns node by key: item'''
-        return self.nodes[name]
+        return self.nodes[index]
 
-    def __setitem__(self, name, node):
+    def __setitem__(self, index, node):
         '''adds a node to the ARG'''
-        node.name = name
+        node.index = index
         self.add(node)
 
-    def __contains__(self, name):
+    def __contains__(self, index):
         '''if ARG contains node key '''
-        return name in self.nodes
+        return index in self.nodes
 
     def equal(self, other):
         '''if self is equal with other (structural equality)'''
         for node in self.nodes.values():
-            if node.name not in other:
+            if node.index not in other:
                 return False
-            if not node.equal(other[node.name]):
+            if not node.equal(other[node.index]):
                 return False
         return True
 
@@ -442,12 +444,12 @@ class ARG(object):
         self.nodes[node.index] = node
         return node
 
-    def rename(self, oldname, newname):
+    def rename(self, oldindex, newindex):
         '''renames a node in the ARG'''
-        node = self.nodes[oldname]
-        node.name = newname
-        del self.nodes[oldname]
-        self.nodes[newname] = node
+        node = self.nodes[oldindex]
+        node.index = newindex
+        del self.nodes[oldindex]
+        self.nodes[newindex] = node
 
     def total_branch_length(self):
         '''the ARG total branch length'''
@@ -468,7 +470,7 @@ class ARG(object):
         '''
         Detaches a specified coalescence node from the rest of the ARG
         '''
-        print("Detach()",node.index, "sib", sib.index)
+        print("Detach()",node.index, "sib", sib.index, "p",node.left_parent.index)
         assert node.left_parent.index == node.right_parent.index
         parent = node.left_parent
         sib.left_parent = parent.left_parent
@@ -476,15 +478,17 @@ class ARG(object):
         sib.breakpoint = parent.breakpoint
         grandparent = parent.left_parent
         if grandparent is not None:
+            print("grandparent", grandparent.index)
             grandparent.update_child(parent, sib)
             grandparent = parent.right_parent
+            print("rightgrandparent", grandparent.index)
             grandparent.update_child(parent, sib)
 
     def reattach(self, u, v, t, new_names):
         # Reattaches node u above node v at time t, new_names is a avltree of all
         #new nodes.index in a new ARG in mcmc
         assert t > v.time
-        assert v.left_parent == None or t < v.left_parent.time
+        # assert v.left_parent == None or t < v.left_parent.time
         if u.left_parent is None:# new_name
             new_name = self.new_name()
             new_names[new_name] = new_name
@@ -607,7 +611,7 @@ class ARG(object):
         rec_count = 0
         coal_count = 0
         roots = bintrees.AVLTree()
-        new_coal =bintrees.AVLTree()
+        new_coal = bintrees.AVLTree()
         while counter < number_of_nodes:
             node = ordered_nodes[counter]
             assert node.time >= time # make sure it is ordered
@@ -782,9 +786,9 @@ class MCMC(object):
 
         self.theta = 1e-8 #mu
         self.rho = 1e-8 #r
-        self.n = 5# sample size
+        self.n = 20# sample size
         self.Ne = 5000
-        self.seq_length = 10 # sequence length
+        self.seq_length = 5 # sequence length
         self.m = 0 # number of snps
         #------- To start get msprime output as initial
         self.get_initial_arg()
@@ -808,7 +812,7 @@ class MCMC(object):
         recombination_rate = 1e-8
         Ne = 5000
         sample_size = 5
-        length = 3e5
+        length = 1e5
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne,
                                    length = length, mutation_rate = 1e-8,
                                    recombination_rate = recombination_rate,
@@ -825,14 +829,25 @@ class MCMC(object):
         self.n = sample_size
         # --------
 
-    def Metropolis_Hastings(self, new_log_lk, new_log_prior):
-        ratio = new_log_lk + new_log_prior + self.transition_prob.log_prob_reverse - \
-                (self.log_lk + self.log_prior + self.transition_prob.log_prob_forward)
-        print("self.transition_prob.spr_log_reverse", self.transition_prob.log_prob_reverse)
-        print("self.transition_prob.spr_log_forward", self.transition_prob.log_prob_forward)
-        print("ratio", ratio)
+    def Metropolis_Hastings(self, new_log_lk, new_log_prior,
+                            trans_prob = True):
+        '''if trans_prob: the ratio includes likelihood,
+            prior and transiton probabilities,
+            Otherwaise: only likelihood. This is
+            for cases where the transition is based on the prior
+        '''
+        if trans_prob:
+            ratio = new_log_lk + new_log_prior + \
+                    self.transition_prob.log_prob_reverse - \
+                    (self.log_lk + self.log_prior +
+                     self.transition_prob.log_prob_forward)
+        else:
+            ratio = new_log_lk - self.log_lk
+        print("forward_prob:", self.transition_prob.log_prob_forward)
+        print("reverse_prob:", self.transition_prob.log_prob_reverse)
+        print("ratio:", ratio)
         print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
-        print("self.log_lk", self.log_lk,"self.log_prior", self.log_prior)
+        print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
         if math.log(random.random()) <= ratio: # accept
             self.log_lk = new_log_lk
             self.log_prior = new_log_prior
@@ -956,7 +971,7 @@ class MCMC(object):
         if backtrack = True: retrieve to the original ARG
         '''
         s = nodes_to_update.pop(node_index)
-        node = self.arg.nodes[node_index]
+        node = self.arg.__getitem__(node_index)
         if node.left_parent is None:
             if not backtrack:
                 raise ValueError("The root node shouldn't be added "
@@ -1049,7 +1064,7 @@ class MCMC(object):
                             if not self.new_names.__contains__(parentSib.index):# BUG4_2 NOTES
                                 if not nodes_to_update.__contains__(parentSib.index):
                                     nodes_to_update[parentSib.index] = self.arg.copy_node_segments(parentSib)
-                                nodesToUpdateTimes[parentSib.time].add(parentSib.index)
+                                nodesToUpdateTimes[parentSib.left_parent.time].add(parentSib.index)
                             if nodes_to_update.__contains__(node.left_parent.index):
                                 del nodes_to_update[node.left_parent.index]
                             self.arg.detach(node.left_parent, node.left_parent.sibling())
@@ -1361,7 +1376,7 @@ class MCMC(object):
                     print("self.floatings", self.floatings)
                     raise ValueError("all_reattachment_nodes is empty."
                                      " There must be atleast one node to reattach.")
-                reattach = self.arg.nodes[random.choice(list(all_reattachment_nodes))]
+                reattach = self.arg.__getitem__(random.choice(list(all_reattachment_nodes)))
                 print("node", node.index, "rejoins to ", reattach.index)
                 #---trans_prob for choose reattach
                 self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes))
@@ -1387,7 +1402,7 @@ class MCMC(object):
                 #---
                 self.floatings.discard(reattach.time) #if any
 
-    def spr_revert_original_ARG(self, detach, sib, old_merger_time):
+    def revert_spr(self, detach, sib, old_merger_time, oldparent_ind):
         '''revert to the original ARG'''
         new_sib = detach.sibling()
         self.arg.detach(detach, new_sib)
@@ -1398,66 +1413,53 @@ class MCMC(object):
             self.update_all_ancestral_material([detach], True)
         else:
             self.update_all_ancestral_material([detach, new_sib], True)
+        if detach.left_parent.index != oldparent_ind:# BUG6
+            new_name = detach.left_parent.index
+            self.arg.rename(new_name, oldparent_ind)
+            self.arg.coal.discard(new_name)
 
     def clean_up(self, coal_to_cleanup):
         '''clean up the Accepted ARG. the ancestral material and snps
         has already set up. This method is only for cleaning the ARG from NAM lineages
         NAM is No ancestral Material nodes that are not a root.
         order the nodes by time and then clean up'''
-        def reconnect(child, node, parent):
+        def reconnect(child, node, leftparent, rightparent):# BUG7
             '''from child--> node--> parent: TO child ---> parent '''
-            if parent.left_child.index == node.index:
-                parent.left_child = child
-            if parent.right_child.index == node.index:
-                parent.right_child = child
-            if child.left_parent.index == node.index:
-                child.left_parent = parent
-            if child.right_parent.index == node.index:
-                child.right_parent = parent
+            child.left_parent = leftparent
+            child.right_parent = rightparent
+            child.breakpoint = node.breakpoint
+            leftparent.update_child(node, child)
+            rightparent.update_child(node, child)
 
         while coal_to_cleanup:
-            node = self.arg.nodes[coal_to_cleanup.pop(coal_to_cleanup.min_key())]
+            node = self.arg.__getitem__(coal_to_cleanup.pop(coal_to_cleanup.min_key()))
             if node.left_child == None and node.right_child == None:
                 if node.left_parent is not None:
                     assert node.left_parent.index == node.right_parent.index
-                    if node.left_parent.left_child.index == node.index:
-                        node.left_parent.left_child = None
-                    if node.left_parent.right_child.index == node.index:
-                        node.left_parent.right_child = None
+                    node.left_parent.update_child(node, None)
             elif node.left_child != None and node.right_child is None:
                 if node.left_parent is not None:
-                    reconnect(node.left_child, node, node.left_parent)
-                    if  node.left_parent.index != node.right_parent.index:
-                        reconnect(node.left_child, node, node.right_parent)
+                    reconnect(node.left_child, node, node.left_parent, node.right_parent)
             elif node.right_child != None and node.left_child is None:
                 if node.left_parent is not None:
-                    reconnect(node.right_child, node, node.left_parent)
-                    if  node.left_parent.index != node.right_parent.index:
-                        reconnect(node.right_child, node, node.right_parent)
+                    reconnect(node.right_child, node, node.left_parent, node.right_parent)
             else: # both not None
                 if node.left_child.first_segment == None and\
-                        node.right_child.first_segment is None:
+                        node.right_child.first_segment == None:
                     if node.left_parent is not None:
-                        assert node.first_segment is not None
+                        assert node.first_segment is  None
                         assert node.left_parent.index == node.right_parent.index
                         node.left_child.left_parent = None
                         node.left_child.right_parent = None
                         node.right_child.left_parent = None
                         node.right_child.right_parent = None
-                        if node.left_parent.left_child.index == node.index:
-                            node.left_parent.left_child = None
-                        if node.left_parent.right_child.index == node.index:
-                            node.left_parent.right_child = None
+                        node.left_parent.update_child(node, None)
                 elif node.left_child.first_segment != None and node.right_child.first_segment is None:
                     assert node.left_parent is not None
-                    reconnect(node.left_child, node, node.left_parent)
-                    if node.left_parent.index != node.right_parent.index:
-                        reconnect(node.left_child, node, node.right_parent)
+                    reconnect(node.left_child, node, node.left_parent, node.right_parent)
                 elif node.right_child.first_segment != None and node.left_child.first_segment is None:
                     assert node.left_parent is not None
-                    reconnect(node.right_child, node, node.left_parent)
-                    if node.left_parent.index != node.right_parent.index:
-                        reconnect(node.right_child, node, node.right_parent)
+                    reconnect(node.right_child, node, node.left_parent, node.right_parent)
                 else: # non None
                     raise ValueError("both children have seg, so this shouldnt be in coal_to_clean")
             del self.arg.nodes[node.index]
@@ -1598,7 +1600,7 @@ class MCMC(object):
             nodes = clean_nodes.pop(min(clean_nodes))
             assert 0 < len(nodes) <= 2
             if len(nodes) == 2:# two rec parents
-                nodes = [self.arg.nodes[nodes.pop()], self.arg.nodes[nodes.pop()]]
+                nodes = [self.arg.__getitem__(nodes.pop()), self.arg.__getitem__(nodes.pop())]
                 assert nodes[0].left_child.index == nodes[0].right_child.index
                 assert nodes[1].left_child.index == nodes[1].right_child.index
                 assert nodes[0].left_child.index == nodes[1].left_child.index
@@ -1607,7 +1609,7 @@ class MCMC(object):
                     break
             else:
                 assert len(nodes) == 1
-                nodes = [self.arg.nodes[nodes.pop()]]
+                nodes = [self.arg.__getitem__(nodes.pop())]
             while nodes:
                 node = nodes.pop(0)
                 valid, clean_nodes, detach_snps, completed_snps, reverse_done = \
@@ -1619,6 +1621,7 @@ class MCMC(object):
 
     def spr(self):
         '''perform an SPR move on the ARG'''
+        assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         # Choose a random coalescence node, and one of its children to detach.
         # Record the current sibling and merger time in case move is rejected.
         # TODO: We need a better way to sample a uniform choice from an AVL tree, or
@@ -1626,11 +1629,12 @@ class MCMC(object):
         self.floatings = bintrees.AVLTree()
         self.floatings_to_ckeck = bintrees.AVLTree()#key index, value: index; this is for checking new roots
         self.new_names = bintrees.AVLTree()
-        detach = self.arg.nodes[random.choice(list(self.arg.coal))]
+        detach = self.arg.__getitem__(random.choice(list(self.arg.coal)))
         if random.random() < 0.5:
             detach = detach.left_child
         else:
             detach = detach.right_child
+        oldparent_ind = detach.left_parent.index
         self.floatings[detach.time] = detach.index
         self.floatings_to_ckeck[detach.index] = detach.index
         self.new_names[detach.left_parent.index] = detach.left_parent.index
@@ -1699,9 +1703,9 @@ class MCMC(object):
                 self.arg.roots = new_roots # update roots
                 self.arg.coal = new_coals
             else: # rejected: retrieve the original- backtrack--> no changes on arg.coal
-                self.spr_revert_original_ARG(detach, sib, old_merger_time)
+                self.revert_spr(detach, sib, old_merger_time, oldparent_ind)
         else:
-            self.spr_revert_original_ARG(detach, sib, old_merger_time)
+            self.revert_spr(detach, sib, old_merger_time, oldparent_ind)
         self.empty_containers()
 
     #============
@@ -1749,7 +1753,7 @@ class MCMC(object):
             parent.update_child(otherParent, child)
         return invisible
 
-    def rem_revert_original_ARG(self, remParent, otherParent,
+    def revert_remove_recombination(self, remParent, otherParent,
                                 child, remGrandparent, remPsib,
                                 old_child_bp, invisible):
         '''revert REMOVE rec to the original ARG'''
@@ -1795,9 +1799,10 @@ class MCMC(object):
         5. check validity, compatibility and reverse prob
         6. if not valid, revert the move
         '''
+        assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         assert not self.arg.rec.is_empty()
         #1. choose a rec parent
-        remParent = self.arg.nodes[random.choice(list(self.arg.rec.keys()))]
+        remParent = self.arg.__getitem__(random.choice(list(self.arg.rec.keys())))
         assert remParent.left_child == remParent.right_child
         #-- forward transition prob
         self.transition_prob.rem_choose_remParent(len(self.arg.rec))
@@ -1806,7 +1811,7 @@ class MCMC(object):
         else:
             #--- detach R:
             remPsib = remParent.sibling()
-            remGrandparent = self.arg.nodes[remParent.left_parent.index]
+            remGrandparent = remParent.left_parent
             #-----
             child = remParent.left_child
             old_child_bp = child.breakpoint
@@ -1816,7 +1821,7 @@ class MCMC(object):
             if remGrandparent.left_parent is None:
                 self.floatings[remPsib.left_parent.time] = remPsib.index
                 self.floatings_to_ckeck[remPsib.index] = remPsib.index
-            if remParent.left_parent.index != otherParent.left_parent.index:
+            if remParent.left_parent.index != otherParent.left_parent.index:#visible
                 self.arg.detach(remParent, remPsib)
             #--- detach otherParent
             print("remPrent",remParent.index, "otherParent",
@@ -1832,7 +1837,7 @@ class MCMC(object):
             #--- remove them from ARG
             remParent = self.arg.nodes.pop(remParent.index)
             otherParent = self.arg.nodes.pop(otherParent.index)
-            remGrandparent = self.arg.nodes.pop(remParent.left_parent.index)
+            remGrandparent = self.arg.nodes.pop(remGrandparent.index)
 
             #--- update ancestral material
             if invisible or remGrandparent.left_parent is None: #otherParent == remPsib
@@ -1901,10 +1906,10 @@ class MCMC(object):
                     self.arg.rec.discard(remParent.index)
                     self.arg.rec.discard(otherParent.index)
                 else:
-                    self.rem_revert_original_ARG(remParent, otherParent, child,
+                    self.revert_remove_recombination(remParent, otherParent, child,
                                             remGrandparent, remPsib, old_child_bp, invisible)
             else:
-                self.rem_revert_original_ARG(remParent, otherParent, child,
+                self.revert_remove_recombination(remParent, otherParent, child,
                                             remGrandparent, remPsib, old_child_bp, invisible)
         self.empty_containers()
 
@@ -1917,7 +1922,7 @@ class MCMC(object):
         not contain nodes without seg where both children have segments (roots)
         '''
         for ind in new_roots:
-            root = self.arg.nodes[ind]
+            root = self.arg.__getitem__(ind)
             assert root.first_segment is None
             if root.left_parent is not None:
                 assert not self.arg.nodes.__contains__(root.left_parent.index)
@@ -1926,8 +1931,7 @@ class MCMC(object):
             else:
                 root.right_parent = None
 
-
-    def add_revert_original_ARG(self, child, followParent, detachParent, oldbr):
+    def revert_add_recombination(self, child, followParent, detachParent, oldbr):
         '''revert ADD rec move'''
         # detach detachParent
         sib = detachParent.sibling()
@@ -1952,7 +1956,7 @@ class MCMC(object):
         '''choose a node to put a recombination on it'''
         ind = random.choice(list(self.arg.nodes.keys()))
         if not self.arg.roots.__contains__(ind):
-            return self.arg.nodes[ind]
+            return self.arg.__getitem__(ind)
         else:
             return self.add_choose_child()
 
@@ -2010,6 +2014,7 @@ class MCMC(object):
             e) m-h
         forward transition: also reattach detachPrent, choose time to reattach
         '''
+        assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         child = self.add_choose_child()
         assert child.first_segment != None and child.left_parent != None
         self.transition_prob.add_choose_node(len(self.arg.nodes) - len(self.arg.coal))#1
@@ -2078,12 +2083,151 @@ class MCMC(object):
                     self.arg.roots = new_roots # update roots
                     self.arg.coal = new_coals
                 else:
-                    self.add_revert_original_ARG(child, followParent,
+                    self.revert_add_recombination(child, followParent,
                                                  detachParent, oldbreakpoint)
             else:
-                self.add_revert_original_ARG(child, followParent,
+                self.revert_add_recombination(child, followParent,
                                                 detachParent, oldbreakpoint)
         self.empty_containers()
+
+    #=========
+    # adjust time move
+
+    def adjust_times(self, calc_prior = True):
+        '''
+        modify the node times according to CwR
+        also calculate the prior in place if calc_prior = true
+        '''
+        ordered_nodes = [v for k, v in sorted(self.arg.nodes.items(),
+                                     key = lambda item: item[1].time)]
+        number_of_lineages = self.n
+        number_of_links = number_of_lineages * (self.seq_length - 1)
+        number_of_nodes = self.arg.__len__()
+        counter = self.n
+        prev_t  = 0
+        log_prior = 0
+        original_t = [0 for i in range(number_of_nodes)] # for reverting the move
+        while counter < number_of_nodes:
+            node = ordered_nodes[counter]
+            rate = (number_of_lineages * (number_of_lineages - 1)
+                    / (4* self.Ne)) + (number_of_links * (self.rho))
+            t = prev_t + random.expovariate(rate)
+            # ret -= rate * (node.time - time)
+            if node.left_child.index == node.right_child.index: #rec
+                original_t[counter] = node.time
+                original_t[counter +1] = node.time
+                node.time = t
+                ordered_nodes[counter+1].time = t
+                gap = node.left_child.num_links()-\
+                          (node.left_child.left_parent.num_links() +
+                           node.left_child.right_parent.num_links())
+                if calc_prior:
+                    log_prior -= rate * (t - prev_t)
+                    log_prior += math.log(self.rho)
+                number_of_links -= gap
+                number_of_lineages += 1
+                counter += 2
+            else: #CA
+                original_t[counter] = node.time
+                node.time = t
+                if calc_prior:
+                    log_prior -= rate * (t - prev_t)
+                    log_prior -=  math.log(2*self.Ne)
+                if node.first_segment == None:
+                    node_numlink = 0
+                    number_of_lineages -= 2
+                    counter += 1
+                else:
+                    node_numlink = node.num_links()
+                    number_of_lineages -= 1
+                    counter += 1
+                lchild_numlink = node.left_child.num_links()
+                rchild_numlink = node.right_child.num_links()
+                number_of_links -= (lchild_numlink + rchild_numlink) - node_numlink
+            prev_t = t
+
+        # m-h, without prior because it get cancels out with transition probs
+        new_log_lk = self.arg.log_likelihood(self.theta, self.data)
+        mh_accept = self.Metropolis_Hastings(new_log_lk, log_prior, trans_prob = False)
+        print("mc_accept is", mh_accept)
+        if not mh_accept:
+            self.revert_adjust_times(ordered_nodes, original_t)
+
+    def revert_adjust_times(self, ordered_nodes, original_t):
+        '''revert the proposed ARG by
+        adjust_times move to its orgiginal
+        '''
+        counter = self.n
+        number_of_nodes = len(ordered_nodes)
+        while counter < number_of_nodes:
+            node = ordered_nodes[counter]
+            node.time = original_t[counter]
+            if node.left_child.index == node.right_child.index: #rec
+                ordered_nodes[counter + 1].time = original_t[counter + 1]
+                counter += 2
+            else:
+                counter += 1
+
+    #======
+    #modify recombination position
+
+    def adjust_breakpoint(self):
+        '''simulate the the position of
+        an existing recombination
+        1. randomly choose a recombination event
+        2. simulate a new breakpoint for the rec
+        3. update ancestral material
+        4. if floating: reattach
+        5. compatibility/ validity check
+        '''
+        assert not self.arg.rec.is_empty()
+        recleftparent = self.arg.__getitem__(random.choice(list(self.arg.rec.keys())))
+        assert recleftparent.left_child.index == recleftparent.right_child.index
+        child = recleftparent.left_child
+        # TODO complete this
+
+
+
+    def get_transition(self, w = [1, 1, 1, 1]):
+        '''
+        choose a transition move proportional to the given weights (w)
+        Note that order is important:
+        orders: "spr", "remove", "add", "at"(adjust_times),
+        NOTE: if rem and add weights are not equal, we must include
+                that in the transition probabilities
+        '''
+        if len(self.arg.rec) == 0:
+            w[1] = 0
+        ind = random.choices([i for i in range(len(w))], w)[0]
+        if ind == 0:
+            return "spr"
+        elif ind == 1:
+            return "rem"
+        elif ind == 2:
+            return "add"
+        elif ind == 3:
+            return "at"
+
+    def run(self, iteration = 10, thin = 1, burn = 0):
+        it = 0
+        t0 = time.time()
+        while it < iteration:
+            print("iteration ~~~~~", it)
+            move = self.get_transition()
+            print("MOVE ---", move)
+            if move == "spr":
+                self.spr()
+            elif move == "rem":
+                self.remove_recombination()
+            elif move == "add":
+                self.add_recombination()
+            elif move =="at":
+                self.adjust_times()
+            it += 1
+        t1= time.time()
+        print(iteration," iterations took", round(t1 - t0, 2),
+              "Sec. Time per iter:", (t1-t0)/iteration)
+
 
     def print_state(self):
         print("self.arg.coal", self.arg.coal)
@@ -2093,7 +2237,7 @@ class MCMC(object):
               "l_bp", "snps", "fir_seg_sam",
               sep="\t")
         for j in self.arg.nodes:
-            node = self.arg.nodes[j]
+            node = self.arg.__getitem__(j)
             if node.left_parent is not None or node.left_child is not None:
 
                 s = node.first_segment
@@ -2130,10 +2274,7 @@ class MCMC(object):
 if __name__ == "__main__":
     pass
     mcmc = MCMC()
-    print("spr------")
-    mcmc.spr()
-    print("remove-------")
-    mcmc.remove_recombination()
-    print("add------")
-    mcmc.add_recombination()
+    mcmc.run(100)
+
+
 

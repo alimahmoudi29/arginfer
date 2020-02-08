@@ -401,45 +401,45 @@ class TestARG(unittest.TestCase):
         # ca, node =6
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[6] - ts_full.tables.nodes.time[5])+\
-                                 math.log(4*Ne)
+                                 math.log(2*Ne)
         num_link -= 599
         k = 3
         #rec nodes 7, 8
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
         gap = 1
         true_log_prior  -= rate * (ts_full.tables.nodes.time[7] - ts_full.tables.nodes.time[6])
-        true_log_prior += math.log(rho * gap)
+        true_log_prior += math.log(rho )
         num_link -= 1
         k = 4
         # CA , node = 9
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[9] - ts_full.tables.nodes.time[8]) +\
-                                     math.log(4*Ne)
+                                     math.log(2*Ne)
         num_link -= 553
         k = 3
         #Rec , nodes = 10, 11
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
         gap = 1
         true_log_prior  -= rate * (ts_full.tables.nodes.time[10] - ts_full.tables.nodes.time[9])
-        true_log_prior += math.log(rho * gap)
+        true_log_prior += math.log(rho )
         num_link -= 1
         k = 4
         # CA, node= 12
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[12] - ts_full.tables.nodes.time[10]) +\
-                                                                             math.log(4*Ne)
+                                                                             math.log(2*Ne)
         num_link += 1
         k = 3
         # CA , node = 13
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[13] - ts_full.tables.nodes.time[12])+\
-                                                                                 math.log(4*Ne)
+                                                                                 math.log(2*Ne)
         num_link -= 45
         k = 2
         # CA, node 14
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[14] - ts_full.tables.nodes.time[13])+\
-                                                                         math.log(4*Ne)
+                                                                         math.log(2*Ne)
         num_link -= (599 + 599)
         k = 1
         #----- compare
