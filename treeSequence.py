@@ -24,7 +24,7 @@ class TreeSeq(object):
         for edge in self.tables.edges:
             self.edges_dict[edge.parent].append(edge)
         self.n = ts_full.sample_size
-        self.m = ts_full.sequence_length
+        self.seq_length = ts_full.sequence_length
         self.mutation_map = self.map_mutation()#[[SNP]] where index is ts_node
         # print("selfmutations", self.mutation_map)
         self.arg = argbook.ARG()
@@ -34,14 +34,12 @@ class TreeSeq(object):
             node = self.arg.alloc_node(k, 0)#index, time,
             samples = bintrees.AVLTree()
             samples.__setitem__(k, k)
-            s = self.arg.alloc_segment(0, math.ceil(self.m), node, samples)
+            s = self.arg.alloc_segment(0, math.ceil(self.seq_length), node, samples)
             node.first_segment = s
             self.add_mutation(node)
             node = self.arg.add(node)
-            x = self.arg.alloc_segment(0, math.ceil(self.m), node, samples)
+            x = self.arg.alloc_segment(0, math.ceil(self.seq_length), node, samples)
             self.parent_nodes[k] = x
-        # self.R = bintrees.AVLTree()
-        # self.C = bintrees.AVLTree()
 
     def find_break(self, z, break_point):
         while z.prev is not None:
@@ -86,7 +84,8 @@ class TreeSeq(object):
     def argnode_to_ts(self):
         '''TODO: get ts_full from argnode'''
 
-    def recombination_event(self, time, l_break, r_break, p1, p2, child):
+    def recombination_event(self, time, l_break,
+                            r_break, p1, p2, child):
         s = self.parent_nodes[child]
         assert s is not None
         if r_break == None:#  ancestral REC

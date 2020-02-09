@@ -395,7 +395,7 @@ class TestARG(unittest.TestCase):
         rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
         #ca node =5
         true_log_prior = 0
-        true_log_prior  -= rate * (ts_full.tables.nodes.time[5] - 0) + math.log(4*Ne)
+        true_log_prior  -= rate * (ts_full.tables.nodes.time[5] - 0) + math.log(2*Ne)
         num_link -= 599
         k = 4
         # ca, node =6
@@ -596,7 +596,7 @@ class TestMCMC(unittest.TestCase):
         mcmc.n = 3
         mcmc.m = 0
         mcmc. seq_length = 10
-        mcmc.print_state()
+        # mcmc.print_state()
         # -- - - - -
         detach = mcmc.arg.nodes[6]
         old_merger_time = detach.left_parent.time
@@ -610,9 +610,10 @@ class TestMCMC(unittest.TestCase):
         if sib.left_parent is not None:
             mcmc.update_all_ancestral_material(sib)
         mcmc.spr_reattach_floatings(detach, sib, old_merger_time)
-        print("coal", mcmc.arg.coal)
-        mcmc.print_state()
+        # print("coal", mcmc.arg.coal)
+        # mcmc.print_state()
         mcmc.spr()
+
 if __name__=="__main__":
     unittest.main()
 
