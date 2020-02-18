@@ -122,7 +122,7 @@ class TransProb(object):
 class MCMC(object):
 
     def __init__(self, sample_size = 5, Ne =5000, seq_length= 1e5, mutation_rate=1e-8,
-                 recombination_rate=1e-8,
+                 recombination_rate=1e-8, random_seed = 1,
                  data = {}, outpath = os.getcwd()+"/output"):
         self.data = data #a dict, key: snp_position- values: seqs with derived allele
         self.arg = ARG()
@@ -134,6 +134,7 @@ class MCMC(object):
         self.m = 0 # number of snps
         self.log_lk = 0
         self.log_prior = 0
+        self.random_seed = random_seed
         self.outpath = outpath
         if not os.path.exists(self.outpath):
             os.makedirs(self.outpath)
@@ -175,7 +176,7 @@ class MCMC(object):
         ts_full = msprime.simulate(sample_size = self.n, Ne = self.Ne,
                                    length = self.seq_length, mutation_rate = self.mu,
                                    recombination_rate = self.r,
-                                   random_seed = 20, record_full_arg = True)
+                                   random_seed = self.random_seed, record_full_arg = True)
         tsarg = treeSequence.TreeSeq(ts_full)
         tsarg.ts_to_argnode()
         self.arg = tsarg.arg

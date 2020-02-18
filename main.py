@@ -2,8 +2,8 @@ from mcmc import *
 import argparse
 from plots import *
 '''
-python3 main.py -I 20 --thin 1 --burn 0 -n 5 -L 1e5  --Ne 5000 -r 1e-8 -mu 1e-8\
-        -O /Users/amahmoudi/Ali/phd/github_projects/mcmc/ARGinfer/output--\
+python3 main.py -I 20 --thin 1 --burn 0 -n 5 -L 1e5  --Ne 5000 -r 1e-8 -mu 1e-8 \
+        -O /Users/amahmoudi/Ali/phd/github_projects/mcmc/ARGinfer/output \
         --random-seed 5 -p -v --verify
 '''
 
@@ -39,10 +39,11 @@ def run_mcmc(args):
     mu = args.mutation_rate
     r= args.recombination_rate
     Ne= args.Ne
+    random_seed = args.random_seed
     outpath = args.outpath
     random.seed(args.random_seed)
     np.random.seed(args.random_seed+1)
-    mcmc = MCMC(n, Ne, seq_length ,mu , r, data, outpath)
+    mcmc = MCMC(n, Ne, seq_length ,mu , r, random_seed,data, outpath)
     mcmc.run(iteration, thin, burn, args.verify)
     if args.plot:
         p = plot_summary(outpath)
