@@ -24,7 +24,7 @@ class TreeSeq(object):
         for edge in self.tables.edges:
             self.edges_dict[edge.parent].append(edge)
         self.n = ts_full.sample_size
-        self.m = ts_full.sequence_length
+        self.seq_length = ts_full.sequence_length
         self.mutation_map = self.map_mutation()#[[SNP]] where index is ts_node
         # print("selfmutations", self.mutation_map)
         self.arg = argbook.ARG()
@@ -34,14 +34,12 @@ class TreeSeq(object):
             node = self.arg.alloc_node(k, 0)#index, time,
             samples = bintrees.AVLTree()
             samples.__setitem__(k, k)
-            s = self.arg.alloc_segment(0, math.ceil(self.m), node, samples)
+            s = self.arg.alloc_segment(0, math.ceil(self.seq_length), node, samples)
             node.first_segment = s
             self.add_mutation(node)
             node = self.arg.add(node)
-            x = self.arg.alloc_segment(0, math.ceil(self.m), node, samples)
+            x = self.arg.alloc_segment(0, math.ceil(self.seq_length), node, samples)
             self.parent_nodes[k] = x
-        # self.R = bintrees.AVLTree()
-        # self.C = bintrees.AVLTree()
 
     def find_break(self, z, break_point):
         while z.prev is not None:
@@ -86,31 +84,38 @@ class TreeSeq(object):
     def argnode_to_ts(self):
         '''TODO: get ts_full from argnode'''
 
-    def recombination_event(self, time, l_break, r_break, p1, p2, child):
+    def recombination_event(self, time, l_break,
+                            r_break, p1, p2, child):
         s = self.parent_nodes[child]
         assert s is not None
         if r_break == None:#  ancestral REC
             y = self.find_break(s, l_break)
-            y.node.left_breakpoint = l_break
+            y.node.breakpoint = l_break
             if y.prev is not None:
                 assert y.left <= l_break
             else:
                 assert y.left < l_break
-            z = self.arg.alloc_segment(l_break, y.right, y.node, y.samples, None, y.next)
+            z = self.arg.alloc_segment(l_break, y.right, y.node,
+                                       y.samples, None, y.next)
+            assert l_break < y.right
             if y.next is not None:
                 y.next.prev = z
             y.next = None
             y.right = l_break
+            assert  y.left < l_break
             lhs_tail = y
         else: # non ancestral REC
             y = self.find_break(s, r_break)
             x = y.prev
-            y.node.left_breakpoint = x.right
-            y.node.right_breakpoint = y.left
+            break_point = random.choice(range(x.right, y.left + 1))
+            y.node.breakpoint = break_point
+            assert x.right <= break_point <= y.left
             x.next = None
             y.prev = None
             z = y
             lhs_tail = x
+        assert z is not None
+        assert lhs_tail is not None
         self.parent_nodes[p1] = lhs_tail
         self.parent_nodes[p2] = z
         # if z.node.left_child is not None and z.node.left_child.index == z.node.right_child.index:
@@ -121,7 +126,8 @@ class TreeSeq(object):
         # delete those recombination nodes which are not. Will have to be done once the
         # ARG has been constructed by checking which ones will violate snps
 
-        node = self.arg.alloc_node(self.arg.new_name(), time, lhs_tail.node, lhs_tail.node)
+        node = self.arg.alloc_node(self.arg.new_name(), time,
+                                   lhs_tail.node, lhs_tail.node)
         lhs_tail.node.left_parent = node
         if self.mutation_map[node.index]:
             self.add_mutation(node)
@@ -166,9 +172,11 @@ class TreeSeq(object):
                 if x is not None:
                     alpha = x
                     x = None
+                    assert alpha.left < alpha.right
                 if y is not None:
                     alpha = y
                     y = None
+                    assert alpha.left < alpha.right
             else:
                 if y.left < x.left:
                     beta = x
@@ -178,14 +186,17 @@ class TreeSeq(object):
                     alpha = x
                     x = x.next
                     alpha.next = None
+                    assert alpha.left < alpha.right
                 elif x.left != y.left:
                     alpha = self.arg.alloc_segment(x.left, y.left, node, x.samples)
                     x.left = y.left
+                    assert alpha.left < alpha.right
                 else:
                     left = x.left
                     r_max = min(x.right, y.right)
                     right = r_max
                     alpha = self.arg.alloc_segment(left, right, node, x.union_samples(y))
+                    assert alpha.left < alpha.right
                     if alpha.is_mrca(self.n):
                         alpha = None
                     if x.right == right:
@@ -206,12 +217,14 @@ class TreeSeq(object):
                 z = alpha
         if defrag_required:
             z.defrag_segment_chain()
+        assert node is not None
         if z is not None:
             z = z.get_first_segment()
             node.first_segment = z
             self.arg.store_node(z, node)
         else:
             self.arg.add(node)
+            self.arg.roots[node.index] = node.index
 
     def map_mutation(self):
         '''returns a list of mutation positions where where the index
@@ -228,23 +241,17 @@ class TreeSeq(object):
 
     def print_state(self):
         print("node", "time", "left", "right", "l_chi", "r_chi", "l_par", "r_par",
-              "l_bp","r_bp", "snps", "fir_seg_sam",
+              "l_bp", "snps", "fir_seg_sam",
               sep="\t")
         for j in self.arg.nodes:
             node = self.arg.nodes[j]
             if node.left_parent is not None or node.left_child is not None:
-                # if node.left_parent is None:
-                #     print(j, "%.5f" % node.time, "Root", "Root", node.left_child.index,
-                #           node.right_child.index, "Root", "Root",
-                #           node.left_breakpoint, node.right_breakpoint,
-                #           node.snps, node.first_segment.samples, sep="\t")
-                # else:
                 s = node.first_segment
                 if s is None:
                     print(j, "%.5f" % node.time, "root", "root",
                               node.left_child.index,
                               node.right_child.index, "Root", "Root",
-                              node.left_breakpoint, node.right_breakpoint,
+                              node.breakpoint,
                               node.snps ,None, sep="\t")
 
                 while s is not None:
@@ -253,20 +260,20 @@ class TreeSeq(object):
                     if node.left_child is None:
                         print(j, "%.5f" % node.time, l,r, "Leaf", "Leaf",
                               node.left_parent.index,node.right_parent.index,
-                              node.left_breakpoint,  node.right_breakpoint,
+                              node.breakpoint,
                               node.snps,  s.samples,  sep="\t")#
                     elif  node.left_parent is None:
                         print(j, "%.5f" % node.time, l, r,
                               node.left_child.index,
                               node.right_child.index, "Root", "Root",
-                              node.left_breakpoint, node.right_breakpoint,
+                              node.breakpoint,
                               node.snps ,s.samples, sep="\t")
                     else:
                         # print(node.time, node.index, int(l), int(r), node.left_child.index, node.right_child.index)
                         print( j, "%.5f" % node.time, l, r,
                              node.left_child.index, node.right_child.index,
                               node.left_parent.index, node.right_parent.index,
-                              node.left_breakpoint, node.right_breakpoint,
+                              node.breakpoint,
                               node.snps, s.samples, sep="\t")
                     s = s.next
 
@@ -306,7 +313,6 @@ def test_run():
     tsarg= TreeSeq(ts_full)
     tsarg.ts_to_argnode()
     tsarg.print_state()
-
 
 if __name__ == "__main__":
     test_run()
