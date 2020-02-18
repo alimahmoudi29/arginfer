@@ -123,7 +123,7 @@ class MCMC(object):
 
     def __init__(self, sample_size = 5, Ne =5000, seq_length= 1e5, mutation_rate=1e-8,
                  recombination_rate=1e-8,
-                 data = {}, outpath = os.getcwd()+"/output", out_id = "out"):
+                 data = {}, outpath = os.getcwd()+"/output"):
         self.data = data #a dict, key: snp_position- values: seqs with derived allele
         self.arg = ARG()
         self.mu = mutation_rate #mu
@@ -140,12 +140,11 @@ class MCMC(object):
         else:# if exists, first delete it and then create the directory
             shutil.rmtree(self.outpath)
             os.mkdir(self.outpath)
-        self.out_id = out_id
         self.transition_prob = TransProb()
         self.floatings = bintrees.AVLTree()#key: time, value: node index, d in the document
         self.floatings_to_ckeck = bintrees.AVLTree()#key index, value: index; this is for checking new roots
         self.new_names = bintrees.AVLTree()# index:index, of the new names (new parent indexes)
-        self.lambd = 1/(2*self.Ne) # lambd in expovariate
+        self.lambd = 1/(self.Ne) # lambd in expovariate
         self.NAM_recParent = bintrees.AVLTree() # rec parent with seg = None
         self.NAM_coalParent = bintrees.AVLTree() # coal parent with seg = None
         self.coal_to_cleanup = bintrees.AVLTree()# ca parent with atleast a child.seg = None
@@ -156,7 +155,7 @@ class MCMC(object):
         self.summary = pd.DataFrame(columns=('likelihood', 'prior', "posterior",
                                              'ancestral recomb', 'non ancestral recomb',
                                                 'branch length', 'setup'))
-        np.save(os.getcwd()+"/true_values.npy", [self.log_lk, self.log_prior, self.log_lk + self.log_prior,
+        np.save(self.outpath+"/true_values.npy", [self.log_lk, self.log_prior, self.log_lk + self.log_prior,
                                                  self.arg.branch_length,self.arg.num_ancestral_recomb,
                                                  self.arg.num_nonancestral_recomb])
         #---- kuhner
@@ -185,8 +184,6 @@ class MCMC(object):
         self.log_lk = self.arg.log_likelihood(self.mu, self.data)
         self.log_prior = self.arg.log_prior(self.n, self.seq_length,
                                             self.r, self.Ne, False)
-
-        # --------
 
     def truncated_expo(self, a, b, lambd):
         '''
