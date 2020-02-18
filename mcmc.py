@@ -188,7 +188,6 @@ class MCMC(object):
 
         # --------
 
-
     def truncated_expo(self, a, b, lambd):
         '''
         generate a random number from trucated exponential with rate lambd  in (a, b)
