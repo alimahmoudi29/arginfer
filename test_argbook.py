@@ -360,9 +360,9 @@ class TestARG(unittest.TestCase):
                          ((ts_full.tables.nodes.time[14] - ts_full.tables.nodes.time[12]) * 600)
         number_of_mutations = 6
         m = 6 # number of snps
-        theta = 0.1
-        true_log_likelihood = (number_of_mutations * math.log(total_material * theta) -
-                            total_material * theta)
+        mu = 0.1
+        true_log_likelihood = (number_of_mutations * math.log(total_material * mu) -
+                            total_material * mu)
         true_log_likelihood += math.log((ts_full.tables.nodes.time[14] -
                                          ts_full.tables.nodes.time[3]) / total_material)#x=20 , node=3
         true_log_likelihood += math.log((ts_full.tables.nodes.time[14] -
@@ -377,7 +377,7 @@ class TestARG(unittest.TestCase):
                                          ts_full.tables.nodes.time[9]) / total_material)#x=448 , node=9
         #----- log likelihood function
         self.assertTrue(math.isclose(
-                            true_log_likelihood, argnode.log_likelihood(theta, data)))
+                            true_log_likelihood, argnode.log_likelihood(mu, data)))
 
     def test_log_prior(self):
         recombination_rate=1e-8
@@ -389,62 +389,62 @@ class TestARG(unittest.TestCase):
         tsarg = treeSequence.TreeSeq(ts_full)
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
-        rho = 0.1
+        r = 0.1
         k = 5# number_of_lineages
         num_link = 5 * (length - 1)
-        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
+        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * r)
         #ca node =5
         true_log_prior = 0
         true_log_prior  -= rate * (ts_full.tables.nodes.time[5] - 0) + math.log(2*Ne)
         num_link -= 599
         k = 4
         # ca, node =6
-        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
+        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * r)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[6] - ts_full.tables.nodes.time[5])+\
                                  math.log(2*Ne)
         num_link -= 599
         k = 3
         #rec nodes 7, 8
-        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
+        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * r)
         gap = 1
         true_log_prior  -= rate * (ts_full.tables.nodes.time[7] - ts_full.tables.nodes.time[6])
-        true_log_prior += math.log(rho )
+        true_log_prior += math.log(r )
         num_link -= 1
         k = 4
         # CA , node = 9
-        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
+        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * r)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[9] - ts_full.tables.nodes.time[8]) +\
                                      math.log(2*Ne)
         num_link -= 553
         k = 3
         #Rec , nodes = 10, 11
-        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
+        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * r)
         gap = 1
         true_log_prior  -= rate * (ts_full.tables.nodes.time[10] - ts_full.tables.nodes.time[9])
-        true_log_prior += math.log(rho )
+        true_log_prior += math.log(r )
         num_link -= 1
         k = 4
         # CA, node= 12
-        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
+        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * r)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[12] - ts_full.tables.nodes.time[10]) +\
                                                                              math.log(2*Ne)
         num_link += 1
         k = 3
         # CA , node = 13
-        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
+        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * r)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[13] - ts_full.tables.nodes.time[12])+\
                                                                                  math.log(2*Ne)
         num_link -= 45
         k = 2
         # CA, node 14
-        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * rho)
+        rate = (k * (k - 1) / (2*2*Ne)) + (num_link * r)
         true_log_prior  -= rate * (ts_full.tables.nodes.time[14] - ts_full.tables.nodes.time[13])+\
                                                                          math.log(2*Ne)
         num_link -= (599 + 599)
         k = 1
         #----- compare
         self.assertTrue(math.isclose(
-                            true_log_prior, argnode.log_prior(sample_size, length, rho, Ne)))
+                            true_log_prior, argnode.log_prior(sample_size, length, r, Ne)))
 
     def test_total_branch_length(self):
         recombination_rate=1e-8
