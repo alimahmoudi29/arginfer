@@ -29,7 +29,6 @@ class Figure(object):
                     bbox_inches='tight', dpi=400)
         # plt.savefig("figures/{}.png".format(figure_name), bbox_inches='tight', dpi=400)
         plt.close()
-
     def load_true_values(self,filename = "true_values.npy"):
         data_filename = self.outpath + "/{}".format(filename)
         return np.load(data_filename)
@@ -56,10 +55,11 @@ class plot_summary(Figure):
             plt.ylabel(d)
             if i>3:
                 plt.xlabel("Iteration")
-        fig.suptitle("iterations = " +str(int(self.data.setup[0])) + " "+", thining = "+\
+        fig.suptitle("Iter = " +str(int(self.data.setup[0]/1000)) + "K "+", thin = "+\
             str(int(self.data.setup[1]))+ " "+", burn: "+ str(int(self.data.setup[2]))+\
-            ", n= " + str(int(self.data.setup[3]))+ ",\n L= "+ str(int(self.data.setup[4]/1000))+\
-            "K, m= " + str(int(self.data.setup[5]))+ ", acceptance= "+ str(self.data.setup[9])+\
+            ", n= " + str(int(self.data.setup[3]))+", Ne = "+ str(int(self.data.setup[6]/1000))  +\
+                     "K,\n L= "+ str(int(self.data.setup[4]/1000))+\
+            "K, m= " + str(int(self.data.setup[5]))+ ", accept= "+ str(self.data.setup[9])+\
             ", CPU time = " + str(int(self.data.setup[10]/60))+ " min\n" +
                      "detail accept: ["+ str(self.data.setup[11]) +", " + str(self.data.setup[12])+ ", " +
                      str(self.data.setup[13]) + ", "+ str(self.data.setup[14])+ ", "
