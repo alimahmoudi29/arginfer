@@ -155,10 +155,10 @@ class MCMC(object):
         self.arg.nextname = max(self.arg.nodes) + 1
         self.summary = pd.DataFrame(columns=('likelihood', 'prior', "posterior",
                                              'ancestral recomb', 'non ancestral recomb',
-                                                'branch length', 'setup'))
+                                                'branch length',"mu", "r", "Ne", 'setup'))
         np.save(self.outpath+"/true_values.npy", [self.log_lk, self.log_prior, self.log_lk + self.log_prior,
                                                  self.arg.branch_length,self.arg.num_ancestral_recomb,
-                                                 self.arg.num_nonancestral_recomb])
+                                                 self.arg.num_nonancestral_recomb, self.mu, self.r, self.Ne])
         #---- kuhner
         self.floats = bintrees.AVLTree()#floatings: index:index
         self.partial_floatings = collections.defaultdict(list)# index:[a, b, num]
@@ -2580,6 +2580,32 @@ class MCMC(object):
         self.arg.nextname = max(self.arg.nodes) + 1
         self.arg.get_available_names()
 
+
+    #============= transition 7: update parameters
+    def random_normal(self,  mu, sd):
+        '''non negative random number from normal distribution'''
+        v = np.random.normal(mu, sd, 1)[0]
+        if v < 0:
+            v = -v
+        return v
+
+    def update_parameters(self):
+        sd_mu = 1e-8
+        sd_r = 1e-8
+        sd_N  = 200
+        # propose mu
+        new_mu = self.random_normal(self.mu, sd_mu)
+        new_r  = self.random_normal(self.r, sd_r)
+        new_N = self.random_normal(self.Ne, sd_N)
+        new_log_lk = self.arg.log_likelihood(new_mu, self.data)
+        new_log_prior = self.arg.log_prior(self.n,
+                                        self.seq_length, new_r, new_N,False)
+        self.Metropolis_Hastings(new_log_lk, new_log_prior)
+        if self.accept:
+            self.mu = new_mu
+            self.r = new_r
+            self.Ne = new_N
+
     def write_summary(self, row = [], write = False):
         '''
         write the ARG summary to a pd.df
@@ -2593,14 +2619,16 @@ class MCMC(object):
         else:
             self.summary.to_hdf(self.outpath+ "/summary.h5", key = "df")
 
-    def run_transition(self, w = [1, 1, 1, 2, 1, 3]):
+    def run_transition(self, w = [1, 1, 1, 2, 1, 3, 1]):
         '''
         choose a transition move proportional to the given weights (w)
         Note that order is important:
-        orders: "spr", "remove", "add", "at"(adjust_times), "ab" (breakpoint), kuhner
+        orders: "spr", "remove", "add", "at"(adjust_times), "ab" (breakpoint),
+            kuhner, update_parameters
         NOTE: if rem and add weights are not equal, we must include
                 that in the transition probabilities
         '''
+        # w = [0, 0, 0, 0, 0, 1, 1]
         if len(self.arg.rec) == 0:
             w[1] = 0#remove rec
             w[4] = 0# adjust breakpoint
@@ -2621,20 +2649,25 @@ class MCMC(object):
             self.adjust_breakpoint()
         elif ind == 5:#kuhner
             original_ARG = copy.deepcopy(self.arg)
+            old_branc_length = original_ARG.branch_length
             self.kuhner()
             if not self.accept:
                 self.arg = original_ARG
+                assert self.arg.branch_length == old_branc_length
                 print("rejected")
+        elif ind == 6:
+            print("---------update_parameters")
+            self.update_parameters()
         self.detail_acceptance[ind][0] += 1
         if self.accept:
             self.detail_acceptance[ind][1] += 1
 
-    def run(self, iteration = 20, thin = 1, burn = 0, verify = True):
+    def run(self, iteration = 20, thin = 1, burn = 0, verify = False):
         it = 0
         accepted = 0
         t0 = time.time()
         #---test #1 for no division by zero
-        self.detail_acceptance = {i:[1, 0] for i in range(6)}
+        self.detail_acceptance = {i:[1, 0] for i in range(7)}
         #----test
         # for it in tqdm(range(iteration)):
         while it < iteration:
@@ -2647,14 +2680,15 @@ class MCMC(object):
                                     self.log_lk + self.log_prior,
                                 self.arg.num_ancestral_recomb,
                                 self.arg.num_nonancestral_recomb,
-                                self.arg.branch_length, -1])
+                                self.arg.branch_length,
+                                    self.mu, self.r, self.Ne, -1])
                 #dump arg
             if verify:
                 self.arg.verify()
             it += 1
             self.accept = False
-        if iteration > 15:
-            self.summary.setup[0:17] = [iteration, thin, burn, self.n, self.seq_length,
+        if iteration > 18:
+            self.summary.setup[0:18] = [iteration, thin, burn, self.n, self.seq_length,
                                        self.m, self.Ne, self.mu, self.r,
                                         round(accepted/iteration, 2), round((time.time() - t0), 2),
                                         round(self.detail_acceptance[0][1]/self.detail_acceptance[0][0], 2),
@@ -2662,7 +2696,8 @@ class MCMC(object):
                                         round(self.detail_acceptance[2][1]/self.detail_acceptance[2][0], 2),
                                         round(self.detail_acceptance[3][1]/self.detail_acceptance[3][0], 2),
                                         round(self.detail_acceptance[4][1]/self.detail_acceptance[4][0], 2),
-                                        round(self.detail_acceptance[5][1]/self.detail_acceptance[5][0], 2)]
+                                        round(self.detail_acceptance[5][1]/self.detail_acceptance[5][0], 2),
+                                        round(self.detail_acceptance[6][1]/self.detail_acceptance[6][0], 2)]
             self.write_summary(write = True)
         print("detail acceptance", self.detail_acceptance)
 
@@ -2710,7 +2745,7 @@ class MCMC(object):
 if __name__ == "__main__":
     pass
     mcmc = MCMC()
-    mcmc.run(10000, 20, 2000)
+    mcmc.run(100, 1, 0)
 
 
 

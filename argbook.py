@@ -676,7 +676,8 @@ class ARG(object):
 
     def log_prior(self, sample_size, sequence_length, recombination_rate, Ne,
                   NAM = True, new_roots = False , kuhner = False):
-        '''probability of the ARG under coalescen with recombination
+        '''
+        probability of the ARG under coalescen with recombination
         this is after a move and before clean up. then there might be some
          extra NAM lineages, we ignore them.
          :param NAM: no-ancestral material node. If NAm node is allowed. note after spr and
