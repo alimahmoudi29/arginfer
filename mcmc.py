@@ -7,6 +7,7 @@ import numpy as np
 import collections
 import time
 import copy
+import scipy.stats
 from tqdm import tqdm
 import sys
 import os
@@ -121,7 +122,7 @@ class TransProb(object):
 
 class MCMC(object):
 
-    def __init__(self, sample_size = 5, Ne =5000, seq_length= 1e5, mutation_rate=1e-8,
+    def __init__(self, sample_size = 50, Ne =10000, seq_length= 5e3, mutation_rate=1e-8,
                  recombination_rate=1e-8, random_seed = 1,
                  data = {}, outpath = os.getcwd()+"/output"):
         self.data = data #a dict, key: snp_position- values: seqs with derived allele
@@ -781,7 +782,7 @@ class MCMC(object):
                 original_child = self.find_original_child(node)
         return original_parent, original_child, valid, second_child
 
-    def generate_new_time(self, lower_bound =0, upper_bound=1, root= True):
+    def generate_new_time(self, lower_bound = 0, upper_bound=1, root= True):
         '''generate a new time'''
         if root:
             return lower_bound + random.expovariate(self.lambd)
@@ -2580,28 +2581,59 @@ class MCMC(object):
         self.arg.nextname = max(self.arg.nodes) + 1
         self.arg.get_available_names()
 
-
     #============= transition 7: update parameters
-    def random_normal(self,  mu, sd):
+    def random_normal(self,  mean, sd):
         '''non negative random number from normal distribution'''
-        v = np.random.normal(mu, sd, 1)[0]
+        v = np.random.normal(mean, sd, 1)[0]
         if v < 0:
             v = -v
         return v
 
-    def update_parameters(self):
+    def normal_log_pdf(self, mean, sd, x):
+        var = float(sd)**2
+        denom = (2*math.pi*var)**0.5
+        num = math.exp(-(float(x)-float(mean))**2/(2*var))
+        return math.log(num/denom)
+
+    def update_parameters(self, mu= False, r= False, Ne= False):
         sd_mu = 1e-8
         sd_r = 1e-8
-        sd_N  = 200
+        sd_N  = 100
+        N0 = 5000
         # propose mu
-        new_mu = self.random_normal(self.mu, sd_mu)
-        new_r  = self.random_normal(self.r, sd_r)
-        new_N = self.random_normal(self.Ne, sd_N)
+        new_mu = self.mu
+        new_r= self.r
+        new_N = self.Ne
+        if mu:
+            new_mu = self.random_normal(self.mu, sd_mu)
+        if r:
+            new_r = self.random_normal(self.r, sd_r)
+        if Ne:
+            new_N = self.random_normal(self.Ne, sd_N)
         new_log_lk = self.arg.log_likelihood(new_mu, self.data)
         new_log_prior = self.arg.log_prior(self.n,
-                                        self.seq_length, new_r, new_N,False)
-        self.Metropolis_Hastings(new_log_lk, new_log_prior)
-        if self.accept:
+                               self.seq_length, new_r, new_N, False)
+        #------- MH
+        self.accept = False
+        ratio = new_log_lk + new_log_prior + \
+                self.normal_log_pdf(1e-8, sd_r, new_r)+\
+                self.normal_log_pdf(1e-8, sd_mu, new_mu)+\
+                self.normal_log_pdf(N0, sd_N, new_N)+\
+                self.transition_prob.log_prob_reverse - \
+                (self.log_lk + self.log_prior +
+                 self.transition_prob.log_prob_forward +\
+                 self.normal_log_pdf(1e-8, sd_r, self.r)+\
+                self.normal_log_pdf(1e-8, sd_mu, self.mu)+\
+                self.normal_log_pdf(N0, sd_N, self.Ne) )
+        print("forward_prob:", self.transition_prob.log_prob_forward)
+        print("reverse_prob:", self.transition_prob.log_prob_reverse)
+        print("ratio:", ratio)
+        print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
+        print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
+        if math.log(random.random()) <= ratio: # accept
+            self.log_lk = new_log_lk
+            self.log_prior = new_log_prior
+            self.accept = True
             self.mu = new_mu
             self.r = new_r
             self.Ne = new_N
@@ -2619,16 +2651,15 @@ class MCMC(object):
         else:
             self.summary.to_hdf(self.outpath+ "/summary.h5", key = "df")
 
-    def run_transition(self, w = [1, 1, 1, 2, 1, 3, 1]):
+    def run_transition(self, w = [1, 0, 0, 1, 1, 1, 0]):
         '''
         choose a transition move proportional to the given weights (w)
         Note that order is important:
         orders: "spr", "remove", "add", "at"(adjust_times), "ab" (breakpoint),
-            kuhner, update_parameters
+            kuhner, update__mu, update_rho, update_Ne
         NOTE: if rem and add weights are not equal, we must include
                 that in the transition probabilities
         '''
-        # w = [0, 0, 0, 0, 0, 1, 1]
         if len(self.arg.rec) == 0:
             w[1] = 0#remove rec
             w[4] = 0# adjust breakpoint
@@ -2657,17 +2688,24 @@ class MCMC(object):
                 print("rejected")
         elif ind == 6:
             print("---------update_parameters")
-            self.update_parameters()
+            self.update_parameters(True, True, True)
+        # elif ind == 7:
+        #     print("---------update_rho")
+        #     self.update_parameters(r=True)
+        # elif ind == 8:
+        #     print("---------update_Ne")
+        #     self.update_parameters(Ne=True)
         self.detail_acceptance[ind][0] += 1
         if self.accept:
             self.detail_acceptance[ind][1] += 1
 
-    def run(self, iteration = 20, thin = 1, burn = 0, verify = False):
+    def run(self, iteration = 20, thin = 1, burn = 0,
+            verify = False):
         it = 0
         accepted = 0
         t0 = time.time()
         #---test #1 for no division by zero
-        self.detail_acceptance = {i:[1, 0] for i in range(7)}
+        self.detail_acceptance = {i:[1, 0] for i in range(9)}
         #----test
         # for it in tqdm(range(iteration)):
         while it < iteration:
