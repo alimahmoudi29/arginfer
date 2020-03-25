@@ -15,6 +15,7 @@ import shutil
 sys.setrecursionlimit(40000)
 
 from argbook import *
+from initialARG import *
 
 class TransProb(object):
     '''transition probability calculation'''
@@ -122,8 +123,8 @@ class TransProb(object):
 
 class MCMC(object):
 
-    def __init__(self, sample_size = 50, Ne =10000, seq_length= 5e3, mutation_rate=1e-8,
-                 recombination_rate=1e-8, random_seed = 1,
+    def __init__(self, sample_size = 5, Ne =5000, seq_length= 1e5, mutation_rate=1e-8,
+                 recombination_rate=1e-8, random_seed = 2,
                  data = {}, outpath = os.getcwd()+"/output"):
         self.data = data #a dict, key: snp_position- values: seqs with derived allele
         self.arg = ARG()
@@ -157,9 +158,7 @@ class MCMC(object):
         self.summary = pd.DataFrame(columns=('likelihood', 'prior', "posterior",
                                              'ancestral recomb', 'non ancestral recomb',
                                                 'branch length',"mu", "r", "Ne", 'setup'))
-        np.save(self.outpath+"/true_values.npy", [self.log_lk, self.log_prior, self.log_lk + self.log_prior,
-                                                 self.arg.branch_length,self.arg.num_ancestral_recomb,
-                                                 self.arg.num_nonancestral_recomb, self.mu, self.r, self.Ne])
+
         #---- kuhner
         self.floats = bintrees.AVLTree()#floatings: index:index
         self.partial_floatings = collections.defaultdict(list)# index:[a, b, num]
@@ -180,8 +179,26 @@ class MCMC(object):
                                    random_seed = self.random_seed, record_full_arg = True)
         tsarg = treeSequence.TreeSeq(ts_full)
         tsarg.ts_to_argnode()
-        self.arg = tsarg.arg
         self.data = treeSequence.get_arg_genotype(ts_full)
+        #----- true values
+        self.arg = tsarg.arg
+        print("true number of rec", len(self.arg.rec)/2)
+        self.log_lk = self.arg.log_likelihood(self.mu, self.data)
+        self.log_prior = self.arg.log_prior(self.n, self.seq_length,
+                                            self.r, self.Ne, False)
+        np.save(self.outpath+"/true_values.npy", [self.log_lk, self.log_prior,
+                                                  self.log_lk + self.log_prior,
+                                                 self.arg.branch_length,
+                                                  self.arg.num_ancestral_recomb,
+                                                 self.arg.num_nonancestral_recomb,
+                                                  self.mu, self.r, self.Ne])
+        #-----initial
+
+        init= Initial(self.data, self.n, self.seq_length,
+                     self.Ne, self.mu, self.r)
+        init.build()
+        self.arg = init.arg
+        print("initial num rec:", len(self.arg.rec)/2)
         self.m = len(self.data)
         self.log_lk = self.arg.log_likelihood(self.mu, self.data)
         self.log_prior = self.arg.log_prior(self.n, self.seq_length,
@@ -2300,7 +2317,8 @@ class MCMC(object):
                 self.active_links += new_links
             self.active_nodes[node.index] = node.index
 
-    def check_material(self, leftchild, rightchild, leftparent, rightparent):
+    def check_material(self, leftchild, rightchild,
+                       leftparent, rightparent):
         '''
          for a alredy existing event, update the ancestral material
          this is for kuhner move, the cases with no event between a time interval
@@ -2783,7 +2801,7 @@ class MCMC(object):
 if __name__ == "__main__":
     pass
     mcmc = MCMC()
-    mcmc.run(100, 1, 0)
+    mcmc.run(20, 1, 0)
 
 
 
