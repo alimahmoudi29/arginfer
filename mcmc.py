@@ -123,7 +123,7 @@ class TransProb(object):
 
 class MCMC(object):
 
-    def __init__(self, sample_size = 5, Ne =5000, seq_length= 1e5, mutation_rate=1e-8,
+    def __init__(self, sample_size = 20, Ne =5000, seq_length= 1e5, mutation_rate=1e-8,
                  recombination_rate=1e-8, random_seed = 2,
                  data = {}, outpath = os.getcwd()+"/output"):
         self.data = data #a dict, key: snp_position- values: seqs with derived allele
@@ -2669,7 +2669,7 @@ class MCMC(object):
         else:
             self.summary.to_hdf(self.outpath+ "/summary.h5", key = "df")
 
-    def run_transition(self, w = [1, 0, 0, 1, 1, 1, 0]):
+    def run_transition(self, w = [1, 0, 0, 1, 1, 1, 1]):
         '''
         choose a transition move proportional to the given weights (w)
         Note that order is important:
