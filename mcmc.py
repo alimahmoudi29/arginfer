@@ -120,7 +120,6 @@ class TransProb(object):
         else:
             self.log_prob_reverse = math.log(1/num_nodes)
 
-
 class MCMC(object):
 
     def __init__(self, sample_size = 20, Ne =5000, seq_length= 1e5, mutation_rate=1e-8,
