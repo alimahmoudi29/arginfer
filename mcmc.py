@@ -1089,7 +1089,8 @@ class MCMC(object):
             self.floatings_to_ckeck[sib.index] = sib.index
         else:
             self.transition_prob.spr_reattach_time(old_merger_time, max(detach.time, sib.time),
-                                                sib.left_parent.left_parent.time, False, False, self.lambd)
+                                                sib.left_parent.left_parent.time,
+                                                   False, False, self.lambd)
         #---detach
         self.arg.detach(detach, sib)
         #--- update arg
@@ -1197,6 +1198,7 @@ class MCMC(object):
             parent = otherParent.right_parent
             parent.update_child(otherParent, child)
         return invisible
+
 
     def revert_remove_recombination(self, remParent, otherParent,
                                 child, remGrandparent, remPsib,
@@ -1556,6 +1558,7 @@ class MCMC(object):
                 self.revert_add_recombination(child, followParent,
                                                 detachParent, oldbreakpoint)
         self.empty_containers()
+
     #=========
     # adjust times move
 
@@ -2669,7 +2672,7 @@ class MCMC(object):
         else:
             self.summary.to_hdf(self.outpath+ "/summary.h5", key = "df")
 
-    def run_transition(self, w = [1, 0, 0, 1, 1, 1, 1]):
+    def run_transition(self, w = [1, 0, 0, 1, 1, 1, 0]):
         '''
         choose a transition move proportional to the given weights (w)
         Note that order is important:
