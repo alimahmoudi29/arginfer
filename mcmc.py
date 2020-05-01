@@ -166,7 +166,7 @@ class MCMC(object):
         #--- test
         self.detail_acceptance = collections.defaultdict(list)# transiton:[total, accepted]
         #---------- current ARG
-        self.original_ARG = copy.deepcopy(self.arg)
+        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
 
     def get_initial_arg(self):
         '''
@@ -888,7 +888,7 @@ class MCMC(object):
         Transition number 1
         perform an SPR move on the ARG
         '''
-        self.original_ARG = copy.deepcopy(self.arg)
+        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
         assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         # Choose a random coalescence node, and one of its children to detach.
         # Record the current sibling and merger time in case move is rejected.
@@ -1034,7 +1034,7 @@ class MCMC(object):
         5. check validity, compatibility and reverse prob
         6. if not valid, revert the move
         '''
-        self.original_ARG = copy.deepcopy(self.arg)
+        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
         assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         assert not self.arg.rec.is_empty()
         #1. choose a rec parent
@@ -1234,7 +1234,7 @@ class MCMC(object):
             e) m-h
         forward transition: also reattach detachPrent, choose time to reattach
         '''
-        self.original_ARG = copy.deepcopy(self.arg)
+        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
         assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         child = self.add_choose_child()
         assert child.first_segment != None and child.left_parent != None
@@ -1406,7 +1406,7 @@ class MCMC(object):
         5. compatibility/ validity check
         transition would only be for floatings
         '''
-        self.original_ARG = copy.deepcopy(self.arg)
+        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
         assert not self.arg.rec.is_empty()
         recparent = self.arg.__getitem__(random.choice(list(self.arg.rec.keys())))
         assert recparent.left_child.index == recparent.right_child.index
@@ -2221,7 +2221,7 @@ class MCMC(object):
         '''
         # self.print_state()
         #---- forward transition
-        self.original_ARG = copy.deepcopy(self.arg)
+        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
         self.transition_prob.kuhner_num_nodes(self.arg.__len__() - len(self.arg.roots))
         valid = True
         prune = self.add_choose_child()

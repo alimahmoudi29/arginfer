@@ -31,6 +31,17 @@ class Segment(object):
         return ((self.left, self.right)
                 < (other.left, other.right))
 
+    def copy(self):
+        ''':return a copy of this segment'''
+        s = Segment()
+        s.left = self.left
+        s.right = self.right
+        s.node = self.node
+        s.samples = self.samples
+        s.next = self.next
+        s.prev = self.prev
+        return s
+
     def contains(self, x):
         return x >= self.left and x < self.right
 
@@ -147,6 +158,27 @@ class Node(object):
         self.time = None
         self.breakpoint = None
         self.index = index
+
+    def copy(self):
+        '''a copy of the node'''
+        cpy_node = Node(self.index)
+        s = self.first_segment
+        if s is not None:
+            x = s.copy()
+            cpy_node.first_segment = x
+            x.node = cpy_node
+            x = x.next
+            while x is not None:
+                s = x.copy()
+                s.prev.next = s
+                x.node = cpy_node
+                x = x.next
+        else:
+            cpy_node.first_segment = None
+        cpy_node.time = self.time
+        cpy_node.breakpoint = self.breakpoint
+        cpy_node.snps = self.snps.copy()
+        return cpy_node
 
     def contains(self, x):
         seg = self.first_segment
@@ -355,6 +387,31 @@ class ARG(object):
     def __contains__(self, index):
         '''if ARG contains node key '''
         return index in self.nodes
+
+    def copy(self):
+        '''return a copy of the ARG'''
+        arg = ARG()
+        for node in self.nodes.values():
+            cpy_node = node.copy()
+            arg.nodes[cpy_node.index] = cpy_node
+        # connect nodes
+        for node in self.nodes.values():
+            node2 = arg.__getitem__(node.index)
+            if node.left_child != None:
+                node2.left_child = arg.__getitem__(node.left_child.index)
+                node2.right_child = arg.__getitem__(node.right_child.index)
+            if node.left_parent != None:
+                node2.left_parent = arg.__getitem__(node.left_parent.index)
+                node2.right_parent = arg.__getitem__(node.right_parent.index)
+        arg.roots = self.roots.copy()# root indexes
+        arg.rec = self.rec.copy()# arg rec parents nodes
+        arg.coal = self.coal.copy() # arg CA parent node
+        arg.num_ancestral_recomb = self.num_ancestral_recomb
+        arg.num_nonancestral_recomb = self.num_nonancestral_recomb
+        arg.branch_length = self.branch_length
+        arg.nextname = self.nextname # next node index
+        arg.available_names = self.available_names.copy()
+        return arg
 
     def equal(self, other):
         '''if self is equal with other (structural equality)
