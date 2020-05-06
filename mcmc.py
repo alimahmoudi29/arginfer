@@ -112,7 +112,7 @@ class TransProb(object):
         else:
             self.log_prob_reverse += math.log(1/2)
 
-    def kuhner_num_nodes(self, num_nodes,forward =  True):
+    def kuhner_num_nodes(self, num_nodes, forward =  True):
         '''resiprocal of the number of nodes in the ARG excluding the roots'''
         if forward:
             self.log_prob_forward = math.log(1/num_nodes)
@@ -121,7 +121,7 @@ class TransProb(object):
 
 class MCMC(object):
 
-    def __init__(self, sample_size = 5, Ne =5000, seq_length= 5e4, mutation_rate=1e-8,
+    def __init__(self, sample_size = 5, Ne =5000, seq_length= 3e5, mutation_rate=1e-8,
                  recombination_rate=1e-8, random_seed = 2,
                  data = {}, outpath = os.getcwd()+"/output"):
         self.data = data #a dict, key: snp_position- values: seqs with derived allele
@@ -166,7 +166,7 @@ class MCMC(object):
         #--- test
         self.detail_acceptance = collections.defaultdict(list)# transiton:[total, accepted]
         #---------- current ARG
-        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
+        self.original_ARG = copy.deepcopy(self.arg) #  self.arg.copy()
 
     def get_initial_arg(self):
         '''
@@ -888,7 +888,7 @@ class MCMC(object):
         Transition number 1
         perform an SPR move on the ARG
         '''
-        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
+        self.original_ARG = copy.deepcopy(self.arg)#self.arg.copy()
         assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         # Choose a random coalescence node, and one of its children to detach.
         # Record the current sibling and merger time in case move is rejected.
@@ -1034,7 +1034,7 @@ class MCMC(object):
         5. check validity, compatibility and reverse prob
         6. if not valid, revert the move
         '''
-        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
+        self.original_ARG = copy.deepcopy(self.arg)#copy.deepcopy(self.arg)
         assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         assert not self.arg.rec.is_empty()
         #1. choose a rec parent
@@ -1234,7 +1234,7 @@ class MCMC(object):
             e) m-h
         forward transition: also reattach detachPrent, choose time to reattach
         '''
-        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
+        self.original_ARG = copy.deepcopy(self.arg)#copy.deepcopy(self.arg)
         assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         child = self.add_choose_child()
         assert child.first_segment != None and child.left_parent != None
@@ -1376,7 +1376,8 @@ class MCMC(object):
             self.arg.branch_length = old_branch_length
             self.revert_adjust_times(ordered_nodes, original_t)
         self.empty_containers()
-
+        ordered_nodes=[]
+        original_t=[]
     def revert_adjust_times(self, ordered_nodes, original_t):
         '''revert the proposed ARG by
         adjust_times move to its orgiginal
@@ -1406,7 +1407,7 @@ class MCMC(object):
         5. compatibility/ validity check
         transition would only be for floatings
         '''
-        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
+        self.original_ARG = copy.deepcopy(self.arg)#copy.deepcopy(self.arg)
         assert not self.arg.rec.is_empty()
         recparent = self.arg.__getitem__(random.choice(list(self.arg.rec.keys())))
         assert recparent.left_child.index == recparent.right_child.index
@@ -1591,6 +1592,7 @@ class MCMC(object):
         recrate = self.r * self.active_links
         totrate = coalrate_bothF + coalrate_1F1rest + recrate
         new_time = lower_time + random.expovariate(totrate)
+        print("self.active_links is:", self.active_links)
         if not passed_gmrca:
             if new_time  >= upper_time:
                 # no new event in the time interval
@@ -1874,8 +1876,8 @@ class MCMC(object):
             if parent.first_segment != None:
                 self.floats[parent.index] = parent.index
                 self.need_to_visit[parent.index] = parent.index
-                self.active_links -= leftchild.num_links() +\
-                                     rightchild.num_links() - parent.num_links()
+                self.active_links -= (leftchild.num_links() +\
+                                     rightchild.num_links() - parent.num_links())
             else:
                 self.active_links -= leftchild.num_links() + rightchild.num_links()
             self.floats.discard(inds[0])
@@ -1919,7 +1921,6 @@ class MCMC(object):
                 parent_tail = parent.get_tail()
                 if parent.left_parent == None: #future floating
                     self.floats[parent.index] = parent.index
-                    self.active_links -= float_tail.right - float_head.left -1
                     self.active_links += parent_tail.right - parent_head.left-1
                     if self.partial_floatings.__contains__(active_ind):
                         assert self.partial_floatings[active_ind][2] > 0
@@ -1928,7 +1929,6 @@ class MCMC(object):
                 elif not self.partial_floatings.__contains__(active_ind):
                     self.add_to_partial_floating(parent, active_head.left,
                                 active_tail.right, parent_head.left, parent_tail.right)
-                    self.active_links -= float_tail.right - float_head.left -1
                 else: # active_ind in partial floating
                     ch = self.partial_floatings.pop(active_ind)
                     if ch[0] != None and ch[1] != None:
@@ -1942,8 +1942,8 @@ class MCMC(object):
                                 active_tail.right, parent_head.left, parent_tail.right)
                     else:
                         raise ValueError("both ch[0] and ch[1] are None, not a partial float")
-                    self.active_links -= float_tail.right - float_head.left -1
                     self.active_links -= ch[2]
+                self.active_links -= float_tail.right - float_head.left -1
                 self.need_to_visit[parent.index] = parent.index
             elif parent.left_parent != None:
                 # delete its parent--> same way we did for prune
@@ -2078,6 +2078,14 @@ class MCMC(object):
             oldleftparent_right = leftparent.get_tail().right
             oldrightparent_left = rightparent.first_segment.left
             oldrightparent_right = rightparent.get_tail().right
+            assert oldleftparent_left ==\
+                   self.original_ARG.__getitem__(leftparent.index).first_segment.left
+            assert oldleftparent_right ==\
+                   self.original_ARG.__getitem__(leftparent.index).get_tail().right
+            assert oldrightparent_left ==\
+                   self.original_ARG.__getitem__(rightparent.index).first_segment.left
+            assert oldrightparent_right ==\
+                   self.original_ARG.__getitem__(rightparent.index).get_tail().right
             leftparent, rightparent = self.split_node_kuhner(child, leftparent, rightparent)
             if leftparent.first_segment != None and\
                     rightparent.first_segment != None:
@@ -2171,6 +2179,10 @@ class MCMC(object):
             if parent.first_segment != None:
                 oldparent_left = parent.first_segment.left
                 oldparent_right = parent.get_tail().right
+                assert oldparent_left ==\
+                        self.original_ARG.__getitem__(parent.index).first_segment.left
+                assert oldparent_right ==\
+                       self.original_ARG.__getitem__(parent.index).get_tail().right
             else:
                 oldparent_left= None
                 oldparent_right= None
@@ -2208,10 +2220,10 @@ class MCMC(object):
 
     def kuhner(self):
         '''
-        1.randomly choose a lineage otherthan the root,
+        1.randomly choose a lineage other than the root,
             a.put it in need_check, floats
         2. find all the time and nodes greater than prune.time
-        3. find mutations need to be check in future
+        3. find mutations need to be checked in future
         4. if prune is a child of CA:
             a) detach prune
             b)remove P
@@ -2221,7 +2233,7 @@ class MCMC(object):
         '''
         # self.print_state()
         #---- forward transition
-        self.original_ARG = self.arg.copy()#copy.deepcopy(self.arg)
+        self.original_ARG = copy.deepcopy(self.arg)#copy.deepcopy(self.arg)
         self.transition_prob.kuhner_num_nodes(self.arg.__len__() - len(self.arg.roots))
         valid = True
         prune = self.add_choose_child()
@@ -2346,10 +2358,7 @@ class MCMC(object):
         self.active_links = 0
         self.partial_floatings = collections.defaultdict(list)
         self.higher_times = collections.defaultdict(set)#time: (index)
-        self.transition_prob.log_prob_forward = 0
-        self.transition_prob.log_prob_reverse = 0
-        self.arg.nextname = max(self.arg.nodes) + 1
-        self.arg.get_available_names()
+        self.empty_containers()
 
     #============= transition 7: update parameters
     def random_normal(self,  mean, sd):
@@ -2476,7 +2485,7 @@ class MCMC(object):
         # for it in tqdm(range(iteration)):
         while it < iteration:
             print("iteration ~~~~~", it)
-            self.run_transition(w = [1, 1, 1, 3, 2, 1, 0])
+            self.run_transition(w = [0, 0, 0, 0, 0, 4, 0])
             if self.accept:
                 accepted += 1
             if it > burn and it % thin == 0:
@@ -2549,4 +2558,6 @@ class MCMC(object):
 if __name__ == "__main__":
     pass
     mcmc = MCMC()
-    mcmc.run(20, 1, 0)
+    mcmc.run(200, 1, 0)
+
+
