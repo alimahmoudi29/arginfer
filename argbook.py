@@ -2,6 +2,7 @@
 import math
 from sortedcontainers import SortedSet
 import bintrees
+import collections
 import pickle
 
 
@@ -699,10 +700,22 @@ class Node(object):
 
     def update_child(self, oldchild, newchild):
         '''update self child from oldchild to newchild'''
-        if self.left_child.index == oldchild.index:
-            self.left_child = newchild
-        if self.right_child.index == oldchild.index:
-            self.right_child = newchild
+        if self.left_child != None:
+            if self.left_child.index == oldchild.index:
+                self.left_child = newchild
+        if self.right_child != None:
+            if self.right_child.index == oldchild.index:
+                self.right_child = newchild
+
+    def reconnect(self, child):# BUG7
+        '''from child--> self--> parent: TO child ---> parent '''
+        leftparent = self.left_parent
+        rightparent = self.right_parent
+        child.left_parent = leftparent
+        child.right_parent = rightparent
+        child.breakpoint = self.breakpoint
+        leftparent.update_child(self, child)
+        rightparent.update_child(self, child)
 
 class ARG(object):
     '''
@@ -746,8 +759,7 @@ class ARG(object):
         '''return a copy of the ARG'''
         arg = ARG()
         for node in self.nodes.values():
-            cpy_node = node.copy()
-            arg.nodes[cpy_node.index] = cpy_node
+            arg.nodes[node.index] = node.copy()
         # connect nodes
         for node in self.nodes.values():
             node2 = arg.__getitem__(node.index)
@@ -779,6 +791,61 @@ class ARG(object):
                 if not node.equal(other[node.index]):
                     return False
             return True
+
+    def leaves(self, node=None):
+        """
+        Iterates over the leaves of the ARG.
+        """
+        if node is None:
+            for node in self.nodes.values():
+                if node.left_child == None:
+                    yield node
+        else:
+            for node in self.preorder(node):
+                if node.left_child == None:
+                    yield node
+
+    def preorder(self, node=None):
+        """
+        Iterates through nodes in preorder traversal.
+        """
+        visit = set()
+        if node is None:
+            node = self.__getitem__(self.roots.max_key())
+        queue = [node]
+        for node in queue:
+            if node in visit:
+                continue
+            yield node
+            visit.add(node)
+            if node.left_child != None:
+                queue.append(node.left_child)
+                if node.left_child.index != node.right_child.index:
+                    queue.append(node.right_child)
+
+    def postorder(self, node=None):
+        """
+        Iterates through nodes in postorder traversal.
+        """
+        visit = collections.defaultdict(lambda: 0)
+        queue = list(self.leaves(node))
+
+        for node in queue:
+            yield node
+            if node.left_parent!= None:
+                visit[node.left_parent] +=1
+                if node.left_parent.left_child.index != node.left_parent.right_child.index:
+                    num_child = 2
+                else:
+                    num_child =1
+                # if all child has been visited then queue parent
+                if visit[node.left_parent] == num_child:
+                    queue.append(node.left_parent)
+                if node.right_parent.index != node.left_parent.index:
+                    visit[node.right_parent] +=1
+                    # if all child has been visited then queue parent
+                    if visit[node.right_parent] == num_child:
+                        queue.append(node.right_parent)
 
     def set_roots(self):
         self.roots.clear()
