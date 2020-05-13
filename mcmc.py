@@ -2806,7 +2806,7 @@ class MCMC(object):
         # for it in tqdm(range(iteration)):
         while it < iteration:
             print("iteration ~~~~~", it)
-            self.run_transition(w = [0, 0, 0, 2, 0, 2, 0])
+            self.run_transition(w = [1, 1, 1, 4, 1, 2, 0])
             if self.accept:
                 accepted += 1
             print("ancestral_rec:", self.arg.num_ancestral_recomb,
