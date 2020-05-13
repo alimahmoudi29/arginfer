@@ -41,9 +41,9 @@ def run_mcmc(args):
     Ne= args.Ne
     random_seed = args.random_seed
     outpath = args.outpath
-    random.seed(args.random_seed)
-    np.random.seed(args.random_seed+1)
-    mcmc = MCMC(n, Ne, seq_length ,mu , r, random_seed,data, outpath)
+    # random.seed(args.random_seed)
+    # np.random.seed(args.random_seed+1)
+    mcmc = MCMC(n, Ne, seq_length ,mu , r, random_seed, data, outpath)
     mcmc.run(iteration, thin, burn, args.verify)
     if args.plot:
         p = plot_summary(outpath)
