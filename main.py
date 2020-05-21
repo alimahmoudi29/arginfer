@@ -1,13 +1,18 @@
 from mcmc import *
 import argparse
 from plots import *
+import comparison.plot
 '''
-python3 main.py -I 20 --thin 1 --burn 0 -n 5 -L 1e5  --Ne 5000 -r 1e-8 -mu 1e-8 \
+python3 main.py -I 2000 --thin 1 --burn 0 -n 5 -L 1e3  --Ne 5000 -r 1e-8 -mu 1e-8 \
+        --tsfull /Users/amahmoudi/Ali/phd/github_projects/mcmc/test1/ts_sim/sim_r1/n5Ne5K_L1K_iter0.args \
         -O /Users/amahmoudi/Ali/phd/github_projects/mcmc/ARGinfer/output \
         --random-seed 5 -p -v --verify
 '''
 
 def add_arguments(parser):
+    parser.add_argument('--tsfull', type=argparse.FileType('r', encoding='UTF-8'), default=None,
+                                            help='an msprime .srgs file.'
+                                                 ' If none, simulate one with defaults')
     parser.add_argument('--data', '-D', type = str,
                         default= None, help='the path to the data', required=False)
     parser.add_argument('--iteration','-I', type=int, default=20,
@@ -39,15 +44,23 @@ def run_mcmc(args):
     mu = args.mutation_rate
     r= args.recombination_rate
     Ne= args.Ne
-    random_seed = args.random_seed
     outpath = args.outpath
+    tsfull = None
+    if args.tsfull !=None:
+        try:
+            tsfull = msprime.load(args.tsfull.name) #trees is a fh
+        except AttributeError:
+            tsfull = msprime.load(args.tsfull)
     # random.seed(args.random_seed)
     # np.random.seed(args.random_seed+1)
-    mcmc = MCMC(n, Ne, seq_length ,mu , r, random_seed, data, outpath)
+    mcmc = MCMC(tsfull, n, Ne, seq_length ,mu , r, data, outpath)
     mcmc.run(iteration, thin, burn, args.verify)
     if args.plot:
-        p = plot_summary(outpath)
-        p.plot()
+        p= comparison.plot.Trace(outpath, name= "summary")
+        p.arginfer_trace()
+    # if args.plot:
+    #     p = plot_summary(outpath)
+    #     p.plot()
     if args.verbose:
         mcmc.print_state()
 
@@ -60,4 +73,3 @@ def main():
 
 if __name__=='__main__':
     main()
-

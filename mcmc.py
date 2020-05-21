@@ -125,9 +125,10 @@ class TransProb(object):
 
 class MCMC(object):
 
-    def __init__(self, sample_size = 5, Ne =5000, seq_length= 3e5, mutation_rate=1e-8,
-                 recombination_rate=1e-8, random_seed = 2,
+    def __init__(self, ts_full = None, sample_size = 5, Ne =5000, seq_length= 3e5, mutation_rate=1e-8,
+                 recombination_rate=1e-8,
                  data = {}, outpath = os.getcwd()+"/output"):
+        self.ts_full = ts_full
         self.data = data #a dict, key: snp_position- values: seqs with derived allele
         self.arg = ARG()
         self.mu = mutation_rate #mu
@@ -138,7 +139,6 @@ class MCMC(object):
         self.m = 0 # number of snps
         self.log_lk = 0
         self.log_prior = 0
-        self.random_seed = random_seed
         self.outpath = outpath
         if not os.path.exists(self.outpath):
             os.makedirs(self.outpath)
@@ -177,10 +177,13 @@ class MCMC(object):
         '''
         TODO: build an ARG for the given data.
         '''
-        ts_full = msprime.simulate(sample_size = self.n, Ne = self.Ne,
+        if self.ts_full == None:
+            ts_full = msprime.simulate(sample_size = self.n, Ne = self.Ne,
                                    length = self.seq_length, mutation_rate = self.mu,
                                    recombination_rate = self.r,
-                                   random_seed = self.random_seed, record_full_arg = True)
+                                   record_full_arg = True)
+        else:
+            ts_full= self.ts_full
         tsarg = treeSequence.TreeSeq(ts_full)
         tsarg.ts_to_argnode()
         self.data = treeSequence.get_arg_genotype(ts_full)
@@ -2806,11 +2809,9 @@ class MCMC(object):
         # for it in tqdm(range(iteration)):
         while it < iteration:
             print("iteration ~~~~~", it)
-            self.run_transition(w = [1, 1, 1, 4, 1, 2, 0])
+            self.run_transition(w = [1, 1, 1, 5, 1, 3, 0])
             if self.accept:
                 accepted += 1
-            print("ancestral_rec:", self.arg.num_ancestral_recomb,
-                  "non_anc_rec:", self.arg.num_nonancestral_recomb)
             if it > burn and it % thin == 0:
                 self.write_summary([self.log_lk, self.log_prior,
                                     self.log_lk + self.log_prior,

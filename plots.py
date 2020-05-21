@@ -29,14 +29,13 @@ class Figure(object):
                     bbox_inches='tight', dpi=400)
         # plt.savefig("figures/{}.png".format(figure_name), bbox_inches='tight', dpi=400)
         plt.close()
+
     def load_true_values(self,filename = "true_values.npy"):
         data_filename = self.outpath + "/{}".format(filename)
         return np.load(data_filename)
 
 class plot_summary(Figure):
-
     name = "summary"
-
     def plot(self,  true_values= True):
         df = self.data
         truth =  self.load_true_values()
@@ -50,6 +49,7 @@ class plot_summary(Figure):
             fig.add_subplot(3, 3, i+1)
             df = self.data[d]
             plt.plot(df)
+            plt.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
             if true_values:
                 plt.axhline(y= truth[i], color="r", linestyle = "--", lw= 1)
             plt.ylabel(d)

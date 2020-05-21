@@ -10,7 +10,6 @@ from sortedcontainers import SortedSet
 import bintrees
 import pickle
 
-
 class Segment(object):
 
     """
@@ -372,7 +371,6 @@ class ARG(object):
     '''
     Ancestral Recombination Graph
     '''
-
     def __init__(self):
         self.nodes = {}
         self.roots = bintrees.AVLTree()# root indexes
