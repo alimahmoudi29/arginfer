@@ -99,8 +99,8 @@ class Trace(Figure):
 
             wanted_true = [truth[2], true_branch_length,
                            true_anc_recomb+true_nonanc_rec]
-        burn_in=1000
-        sample_step=10
+        burn_in=10000
+        sample_step=20
         # keep every sample_stepth after burn_in
         df = df.iloc[burn_in::sample_step, :]
         fig = plt.figure()
@@ -112,8 +112,9 @@ class Trace(Figure):
             plt.plot(df)
             plt.ticklabel_format(style='sci',scilimits=(0,0),axis='y')# (0,0) includes all
             if true_values:
-                plt.axhline(y= wanted_true[i], color="r", linestyle = "--", lw= 1)
-                if i ==2:
+                if i != 0:# posterior is different formula in argweaver
+                    plt.axhline(y= wanted_true[i], color="r", linestyle = "--", lw= 1)
+                if i == 2:
                     plt.axhline(y= true_anc_recomb, color="g", linestyle = "--", lw= 1)
             plt.ylabel(d)
             if i>1:

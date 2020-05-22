@@ -2,23 +2,23 @@
 branch1: if the new rejected, we revert the
 current ARG by backtracking all the changes
 This module: copy the current ARG'''
-import msprime
+
 import treeSequence
-import random
+
 import pandas as pd
 import numpy as np
-import collections
-import time
+
 import copy
-import scipy.stats
 from tqdm import tqdm
 import sys
 import os
 import shutil
-import sys
+
+
 # for recursion issue
 # print("current recursion limit is ", sys.getrecursionlimit())
 sys.setrecursionlimit(500000)
+
 import gc
 
 from argbook import *
@@ -127,7 +127,7 @@ class MCMC(object):
 
     def __init__(self, ts_full = None, sample_size = 5, Ne =5000, seq_length= 3e5, mutation_rate=1e-8,
                  recombination_rate=1e-8,
-                 data = {}, outpath = os.getcwd()+"/output"):
+                 data = {}, outpath = os.getcwd()+"/output", verbose=False):
         self.ts_full = ts_full
         self.data = data #a dict, key: snp_position- values: seqs with derived allele
         self.arg = ARG()
@@ -140,6 +140,7 @@ class MCMC(object):
         self.log_lk = 0
         self.log_prior = 0
         self.outpath = outpath
+        self.verbose = verbose
         if not os.path.exists(self.outpath):
             os.makedirs(self.outpath)
         else:# if exists, first delete it and then create the directory
@@ -189,7 +190,8 @@ class MCMC(object):
         self.data = treeSequence.get_arg_genotype(ts_full)
         #----- true values
         self.arg = tsarg.arg
-        print("true number of rec", len(self.arg.rec)/2)
+        if  self.verbose:
+            print("true number of rec", len(self.arg.rec)/2)
         self.log_lk = self.arg.log_likelihood(self.mu, self.data)
         self.log_prior = self.arg.log_prior(self.n, self.seq_length,
                                             self.r, self.Ne, False)
@@ -204,7 +206,8 @@ class MCMC(object):
                      self.Ne, self.mu, self.r)
         init.build()
         self.arg = init.arg
-        print("initial num rec:", len(self.arg.rec)/2)
+        if  self.verbose:
+            print("initial num rec:", len(self.arg.rec)/2)
         self.m = len(self.data)
         self.log_lk = self.arg.log_likelihood(self.mu, self.data)
         self.log_prior = self.arg.log_prior(self.n, self.seq_length,
@@ -241,11 +244,12 @@ class MCMC(object):
             if kuhner:
                 ratio += (self.transition_prob.log_prob_reverse -\
                           self.transition_prob.log_prob_forward)
-        print("forward_prob:", self.transition_prob.log_prob_forward)
-        print("reverse_prob:", self.transition_prob.log_prob_reverse)
-        print("ratio:", ratio)
-        print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
-        print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
+        if  self.verbose:
+            print("forward_prob:", self.transition_prob.log_prob_forward)
+            print("reverse_prob:", self.transition_prob.log_prob_reverse)
+            print("ratio:", ratio)
+            print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
+            print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
         if math.log(random.random()) <= ratio: # accept
             self.log_lk = new_log_lk
             self.log_prior = new_log_prior
@@ -707,7 +711,8 @@ class MCMC(object):
                     raise ValueError("all_reattachment_nodes is empty."
                                      " There must be atleast one node to reattach.")
                 reattach = self.arg.__getitem__(random.choice(list(all_reattachment_nodes)))
-                print("node", node.index,"with time", node.time, "rejoins to ",
+                if  self.verbose:
+                    print("node", node.index,"with time", node.time, "rejoins to ",
                       reattach.index, "with time", reattach.time)
 
                 #---trans_prob for choose reattach
@@ -717,14 +722,16 @@ class MCMC(object):
                     self.floatings.discard(old_merger_time) # this is for removing sib
                 if reattach.left_parent is None:
                     new_merger_time = self.generate_new_time(max_time)
-                    print("new time is from an exponential distribution"
-                          " + reattach.time:", reattach.time)
-                    print("new_merger_time", new_merger_time)
+                    if  self.verbose:
+                        print("new time is from an exponential distribution"
+                              " + reattach.time:", reattach.time)
+                        print("new_merger_time", new_merger_time)
                     self.transition_prob.spr_reattach_time(new_merger_time, max_time, 0,
                                                            True, True, self.lambd)
                 else:
                     new_merger_time = self.generate_new_time(max_time, reattach.left_parent.time, False)
-                    print("new_merger_time", new_merger_time, "reattach.left_parent.time",
+                    if  self.verbose:
+                        print("new_merger_time", new_merger_time, "reattach.left_parent.time",
                           reattach.left_parent.time)
                     if max_time >= reattach.left_parent.time:
                         self.print_state()
@@ -959,9 +966,11 @@ class MCMC(object):
         self.transition_prob.spr_choose_detach(len(self.arg.coal))#1
         #---------------
         old_merger_time = detach.left_parent.time
-        print("detach node", detach.index, " time", detach.time)
+        if  self.verbose:
+            print("detach node", detach.index, " time", detach.time)
         sib = detach.sibling()
-        print("sibling node", sib.index, "parent", detach.left_parent.index)
+        if  self.verbose:
+            print("sibling node", sib.index, "parent", detach.left_parent.index)
         #-- reverse transition for time
         #-- reverse transition for time
         if detach.left_parent.left_parent is None:
@@ -983,7 +992,8 @@ class MCMC(object):
         #update arg.coal---> what about new ones? added in reattach
         # coal_to_cleanup = self.update_arg_coal()
         if self.NAM_recParent: # rec is canceled, reject
-            print("not valid due to removing rec")
+            if  self.verbose:
+                print("not valid due to removing rec")
             valid = False
         else:
             #=--- Vlidity check, do mutations, and revers probs
@@ -1002,7 +1012,6 @@ class MCMC(object):
                 all_reattachment_nodes[sib.index] = sib.index
             self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes), False)
             valid = self.all_validity_check(clean_nodes, detach_snps)
-        print("valid is ", valid)
         if valid:
             #-- calc prior and likelihood and then M-H
             new_log_lk = self.arg.log_likelihood(self.mu, self.data)
@@ -1012,7 +1021,8 @@ class MCMC(object):
             #--- reverse prob choose detach
             self.transition_prob.spr_choose_detach(len(new_coals), False)
             self.Metropolis_Hastings(new_log_lk, new_log_prior)
-            print("mh_accept ", self.accept)
+            if  self.verbose:
+                print("mh_accept ", self.accept)
             #if acceptt
             if self.accept: # clean up
                 # the ancestral material already set up. we just need to
@@ -1113,16 +1123,16 @@ class MCMC(object):
             if remParent.left_parent.index != otherParent.left_parent.index:#visible
                 self.arg.detach(remParent, remPsib)
             #--- detach otherParent
-            print("remPrent",remParent.index, "otherParent",
-                  otherParent.index,"child", child.index)
-            print("remPsib", remPsib.index, "remGrandparent",
-                  remGrandparent.index)
-            print("otherparentlp", otherParent.left_parent.index,
-                  "otherparentrp", otherParent.right_parent.index)
-            print("childlp,", child.left_parent.index, "childrp",
-                  child.right_parent.index)
+            if  self.verbose:
+                print("remPrent",remParent.index, "otherParent",
+                      otherParent.index,"child", child.index)
+                print("remPsib", remPsib.index, "remGrandparent",
+                      remGrandparent.index)
+                print("otherparentlp", otherParent.left_parent.index,
+                      "otherparentrp", otherParent.right_parent.index)
+                print("childlp,", child.left_parent.index, "childrp",
+                        child.right_parent.index)
             invisible = self.detach_otherParent(remParent, otherParent, child)
-            print("invisible", invisible)
             #--- remove them from ARG
             remParent = self.arg.nodes.pop(remParent.index)
             otherParent = self.arg.nodes.pop(otherParent.index)
@@ -1136,7 +1146,8 @@ class MCMC(object):
             self.spr_reattach_floatings(remParent, otherParent, remParent.time)
             # is there any canceled rec?
             if self.NAM_recParent:
-                print("not valid due to removing rec")
+                if  self.verbose:
+                    print("not valid due to removing rec")
                 valid = False
             else:
                 #--- check validity, compatibility and mutations, reverse prob
@@ -1149,7 +1160,8 @@ class MCMC(object):
                     clean_nodes[remPsib.left_parent.time].add(remPsib.left_parent.index)
                     clean_nodes[remPsib.right_parent.time].add(remPsib.right_parent.index)
                 valid = self.all_validity_check(clean_nodes, remParent_snps)
-            print("valid is ", valid)
+            if  self.verbose:
+                print("valid is ", valid)
             if valid:
                 new_log_lk = self.arg.log_likelihood(self.mu, self.data)
                 new_log_prior, new_roots, new_coals = self.arg.log_prior(self.n,
@@ -1186,7 +1198,8 @@ class MCMC(object):
                 self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes), False)
                 #--- now mh
                 self.Metropolis_Hastings(new_log_lk, new_log_prior)
-                print("mh_accept ", self.accept)
+                if  self.verbose:
+                    print("mh_accept ", self.accept)
                 if self.accept:
                     #update coal, and rec
                     self.clean_up(self.coal_to_cleanup)
@@ -1295,7 +1308,8 @@ class MCMC(object):
         head = child.first_segment
         tail = child.get_tail()
         if tail.right - head.left <= 1:# no link
-            print("the node has no link")
+            if  self.verbose:
+                print("the node has less than 2 links")
             valid = False
         else:
             #breakpoint and time
@@ -1315,8 +1329,10 @@ class MCMC(object):
             else:
                 detachParent = newleftparent
             self.transition_prob.add_choose_node_to_float()#4
-            print("child", child.index, "followparent", followParent.index, "detach", detachParent.index,
-                  "old_leftpanre", oldleftparent.index, "oldrightparent", oldrightparent.index)
+            if  self.verbose:
+                print("child", child.index, "followparent", followParent.index,
+                      "detach", detachParent.index, "old_leftpanre",
+                      oldleftparent.index, "oldrightparent", oldrightparent.index)
             #----
             followParent.breakpoint = oldbreakpoint
             followParent.left_parent = oldleftparent
@@ -1324,15 +1340,17 @@ class MCMC(object):
             oldleftparent.update_child(child, followParent)
             oldrightparent.update_child(child, followParent)
             #now update ancestral material
-            print("child.left_parent", child.left_parent.index)
-            print("childrp", child.right_parent.index)
+            if  self.verbose:
+                print("child.left_parent", child.left_parent.index)
+                print("childrp", child.right_parent.index)
             self.update_all_ancestral_material([followParent])
             #--- reattach detachParent
             self.floatings[detachParent.time] = detachParent.index
             self.floatings_to_ckeck[detachParent.index] = detachParent.index
             self.spr_reattach_floatings(child, child, child.time) # fake *args
             if self.NAM_recParent: # rec is canceled, reject
-                print("not valid due to removing rec")
+                if  self.verbose:
+                    print("not valid due to removing rec")
                 valid = False
             else:
                 #validability, compatibility
@@ -1348,7 +1366,8 @@ class MCMC(object):
                 #--- reverse prob--
                 self.transition_prob.rem_choose_remParent(len(self.original_ARG.rec)+2, False)
                 self.Metropolis_Hastings(new_log_lk, new_log_prior)
-                print("mh_accept ", self.accept)
+                if  self.verbose:
+                    print("mh_accept ", self.accept)
                 if self.accept:
                     #update coal, and rec
                     self.clean_up(self.coal_to_cleanup)
@@ -1424,7 +1443,8 @@ class MCMC(object):
         old_branch_length = self.arg.branch_length
         new_log_lk = self.arg.log_likelihood(self.mu, self.data)
         self.Metropolis_Hastings(new_log_lk, log_prior, trans_prob = False)
-        print("mh_accept ", self.accept)
+        if  self.verbose:
+            print("mh_accept ", self.accept)
         if not self.accept:
             # self.arg = self.original_ARG
             self.arg.branch_length = old_branch_length
@@ -1468,7 +1488,8 @@ class MCMC(object):
         assert recparent.left_child.index == recparent.right_child.index
         child = recparent.left_child
         old_breakpoint = child.breakpoint
-        print("child is ", child.index)
+        if  self.verbose:
+            print("child is ", child.index)
         # TODO complete this
         leftparent = child.left_parent
         rightparent  = child.right_parent
@@ -1477,17 +1498,20 @@ class MCMC(object):
         child_head = child.first_segment
         child_tail = child.get_tail()
         new_breakpoint = random.choice(range(child_head.left + 1, child_tail.right))
-        print("old_breakpoint is",  child.breakpoint)
-        print("new_breakpoint:", new_breakpoint)
+        if  self.verbose:
+            print("old_breakpoint is",  child.breakpoint)
+            print("new_breakpoint:", new_breakpoint)
         y = self.find_break_seg(child_head, child.breakpoint)
-        if y.prev is not None:
+        if y.prev is not None  and self.verbose:
             print("x.right", y.prev.right)
-        print("y left", y.left, "y.right", y.right)
+        if  self.verbose:
+            print("y left", y.left, "y.right", y.right)
         if new_breakpoint == old_breakpoint or\
                 (not y.contains(old_breakpoint) and\
                  y.prev.right <= old_breakpoint<= y.left and\
                  y.prev.right <= new_breakpoint<= y.left):
-            print("new_breakpoint is still non ancestral and at the same interval")
+            if  self.verbose:
+                print("new_breakpoint is still non ancestral and at the same interval")
             # no prob changes, the breakpoint is still in the same non ancestral int
             child.breakpoint = new_breakpoint
             self.accept = True
@@ -1505,7 +1529,8 @@ class MCMC(object):
             self.spr_reattach_floatings(child, child, child.time)#fake *args
             # is there any canceled rec?
             if self.NAM_recParent:
-                print("not valid due to removing rec")
+                if  self.verbose:
+                    print("not valid due to removing rec")
                 valid = False
             else: # check validity
                 # get the affected snps from [start, end) interval
@@ -1520,7 +1545,8 @@ class MCMC(object):
                                                 self.seq_length, self.r, self.Ne, True, True)
                 #--- now mh
                 self.Metropolis_Hastings(new_log_lk, new_log_prior)
-                print("mh_accept ", self.accept)
+                if  self.verbose:
+                    print("mh_accept ", self.accept)
                 if self.accept:
                     #update coal, and rec
                     self.clean_up(self.coal_to_cleanup)
@@ -2110,7 +2136,8 @@ class MCMC(object):
         valid = True
         active_ind = random.choice(list(self.active_nodes))
         float_ind = random.choice(list(self.floats))
-        print("CA1F", "floats:", float_ind, "reattaches to", active_ind)
+        if  self.verbose:
+            print("CA1F", "floats:", float_ind, "reattaches to", active_ind)
         activenode = self.arg.__getitem__(active_ind)
         floatnode = self.arg.__getitem__(float_ind)
         #--- start
@@ -2491,14 +2518,14 @@ class MCMC(object):
             d) if P root, put C in future floating
             else: prune parents, and all the further parents
         '''
-        # self.print_state()
         #---- forward transition
         # self.original_ARG = self.arg.copy()
         self.original_ARG = copy.deepcopy(self.arg)#copy.deepcopy(self.arg)
         self.transition_prob.kuhner_num_nodes(self.arg.__len__() - len(self.arg.roots))
         valid = True
         prune = self.add_choose_child()
-        print("prune is ", prune.index)
+        if  self.verbose:
+            print("prune is ", prune.index)
         assert prune.left_parent != None
         self.floats[prune.index] = prune.index
         self.need_to_visit[prune.index] = prune.index
@@ -2520,7 +2547,8 @@ class MCMC(object):
                     new_event = False
                 if new_event:
                     new_time = new_event[1]; newevent_type = new_event[0]
-                    print("new event type", newevent_type, "at time", new_time)
+                    if self.verbose:
+                        print("new event type", newevent_type, "at time", new_time)
                     valid = self.apply_new_event(newevent_type, new_time)
                     lower_time = new_time
                     if not valid:
@@ -2640,17 +2668,20 @@ class MCMC(object):
                             # check for paritial floating
                     lower_time = upper_time
             else: #passed gmrca
-                print("PASSED GMRCA")
+                if self.verbose:
+                    print("PASSED GMRCA")
                 assert len(self.floats) > 1
                 assert self.active_nodes.is_empty()
                 new_event = self.new_event_time(lower_time, passed_gmrca=True)
                 new_time = new_event[1]; newevent_type = new_event[0]
-                print("new event type", newevent_type, "at time", new_time)
+                if self.verbose:
+                    print("new event type", newevent_type, "at time", new_time)
                 valid = self.apply_new_event(newevent_type, new_time)
                 lower_time = new_time
                 if not valid:
                     break
-        print("valid is", valid)
+        if  self.verbose:
+            print("valid is", valid)
         if valid:
             assert self.floats.is_empty()
             assert self.active_links == 0
@@ -2666,7 +2697,8 @@ class MCMC(object):
             self.transition_prob.kuhner_num_nodes(self.arg.__len__() - len(new_roots), False)
             self.Metropolis_Hastings(new_log_lk, new_log_prior, trans_prob = False, kuhner =True)
             if self.accept:
-                print("accepted")
+                if  self.verbose:
+                    print("Kuhner MH accepted")
                 self.arg.roots = new_roots
                 self.arg.coal = new_coals
             else:
@@ -2727,12 +2759,13 @@ class MCMC(object):
                  self.transition_prob.log_prob_forward +\
                  self.normal_log_pdf(1e-8, sd_r, self.r)+\
                 self.normal_log_pdf(1e-8, sd_mu, self.mu)+\
-                self.normal_log_pdf(N0, sd_N, self.Ne) )
-        print("forward_prob:", self.transition_prob.log_prob_forward)
-        print("reverse_prob:", self.transition_prob.log_prob_reverse)
-        print("ratio:", ratio)
-        print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
-        print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
+                self.normal_log_pdf(N0, sd_N, self.Ne))
+        if  self.verbose:
+            print("forward_prob:", self.transition_prob.log_prob_forward)
+            print("reverse_prob:", self.transition_prob.log_prob_reverse)
+            print("ratio:", ratio)
+            print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
+            print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
         if math.log(random.random()) <= ratio: # accept
             self.log_lk = new_log_lk
             self.log_prior = new_log_prior
@@ -2752,7 +2785,7 @@ class MCMC(object):
             self.summary.loc[0 if math.isnan(self.summary.index.max())\
                 else self.summary.index.max() + 1] = row
         else:
-            self.summary.to_hdf(self.outpath+ "/summary.h5", key = "df")
+            self.summary.to_hdf(self.outpath + "/summary.h5", key = "df")
 
     def run_transition(self, w):
         '''
@@ -2768,25 +2801,25 @@ class MCMC(object):
             w[4] = 0# adjust breakpoint
         ind = random.choices([i for i in range(len(w))], w)[0]
         if ind == 0:
-            print("------spr")
+            # print("------spr")
             self.spr()
         elif ind == 1:
-            print("-----remove")
+            # print("-----remove")
             self.remove_recombination()
         elif ind == 2:
-            print("---------add")
+            # print("---------add")
             self.add_recombination()
         elif ind == 3:
-            print("---------adjust_times")
+            # print("---------adjust_times")
             self.adjust_times()
         elif ind == 4:
-            print("---------adjust breakpoint")
+            # print("---------adjust breakpoint")
             self.adjust_breakpoint()
         elif ind == 5:#kuhner
-            print("---------kuhner")
+            # print("---------kuhner")
             self.kuhner()
         elif ind == 6:
-            print("---------update_parameters")
+            # print("---------update_parameters")
             self.update_parameters(True, True, True)
         # elif ind == 7:
         #     print("---------update_rho")
@@ -2806,10 +2839,9 @@ class MCMC(object):
         #---test #1 for no division by zero
         self.detail_acceptance = {i:[1, 0] for i in range(9)}
         #----test
-        # for it in tqdm(range(iteration)):
-        while it < iteration:
-            print("iteration ~~~~~", it)
-            self.run_transition(w = [1, 1, 1, 5, 1, 3, 0])
+        for it in tqdm(range(iteration), ncols=100, ascii=False):
+        # while it < iteration:
+            self.run_transition(w = [1, 1, 1, 5, 1, 4, 0])
             if self.accept:
                 accepted += 1
             if it > burn and it % thin == 0:
@@ -2820,6 +2852,7 @@ class MCMC(object):
                                 self.arg.branch_length,
                                     self.mu, self.r, self.Ne, -1])
                 #dump arg
+                self.arg.dump(self.outpath,file_name="arg"+str(int(it))+".arg")
             if verify:
                 self.arg.verify()
             it += 1
@@ -2884,5 +2917,4 @@ if __name__ == "__main__":
     pass
     mcmc = MCMC()
     mcmc.run(200, 1, 0, verify=False)
-
 

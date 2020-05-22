@@ -1,14 +1,10 @@
 ''' This module is responsible for ARG classes'''
+import collections
 import math
 from sortedcontainers import SortedSet
 import bintrees
-import collections
 import pickle
 
-import math
-from sortedcontainers import SortedSet
-import bintrees
-import pickle
 
 class Segment(object):
 
@@ -640,7 +636,7 @@ class ARG(object):
         '''
         Detaches a specified coalescence node from the rest of the ARG
         '''
-        print("Detach()",node.index, "sib", sib.index, "p",node.left_parent.index)
+        # print("Detach()",node.index, "sib", sib.index, "p",node.left_parent.index)
         assert node.left_parent.index == node.right_parent.index
         parent = node.left_parent
         sib.left_parent = parent.left_parent
@@ -782,7 +778,7 @@ class ARG(object):
                     number_of_mutations += len(node.snps)
                     snp_nodes.append(node)
         self.branch_length = total_material
-        print("number_of_mutations", number_of_mutations, "m", len(data))
+        # print("number_of_mutations", number_of_mutations, "m", len(data))
         assert number_of_mutations == len(data) # num of snps
         if mutation_rate == 0:
             if number_of_mutations == 0:
@@ -797,11 +793,7 @@ class ARG(object):
             # num_branches = collections.defaultdict(list)
             for x in node.snps:
                 potential_branch_length = node.tree_node_age(x)
-                # num_branches[potential_branch_length].append(x)
                 ret += math.log(potential_branch_length / total_material)
-            # the denominator of the likelihood.
-            # for branch in num_branches.keys():
-            #     ret -= math.log(math.factorial(len(num_branches[branch])))
             # # verify the mutation is on the correct spot
             verify_mutation_node(node, data)
         return ret
@@ -898,9 +890,8 @@ class ARG(object):
         with open(output, "wb") as file:
             pickle.dump(self, file)
 
-    def load(self, path = ' ', file_name = 'arg.arg'):
-        output = path + "/" + file_name
-        with open(output, "rb") as file:
+    def load(self, path = ' '):
+        with open(path, "rb") as file:
             return pickle.load(file)
 
     def verify(self):

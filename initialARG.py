@@ -13,10 +13,6 @@ IDEA:
         highest overlapping and merge them. If there is none,
         reserve the time and go back to 2.
 '''
-import bintrees
-import math
-import numpy as np
-import collections
 import time
 import random
 import msprime
@@ -24,6 +20,7 @@ from operator import itemgetter
 from treeSequence import get_arg_genotype
 import argbook
 from argbook import *
+
 
 class Initial(object):
 

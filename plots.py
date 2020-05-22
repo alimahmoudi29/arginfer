@@ -1,13 +1,9 @@
 import os
 import pandas as pd
 import numpy as np
-import matplotlib
 # matplotlib.use('Agg')  # NOQA
 import matplotlib.pyplot as plt
 # import matplotlib.gridspec as gridspec
-from mpl_toolkits.axes_grid1.inset_locator import InsetPosition, inset_axes
-import seaborn as sns
-import scipy
 import time
 
 class Figure(object):
@@ -15,7 +11,6 @@ class Figure(object):
     Superclass of figures . Each figure is a concrete subclass.
     """
     name = None
-
     def __init__(self, outpath = os.getcwd() +"/output"):
         self.outpath = outpath
         datafile_name = self.outpath + "/{}.h5".format(self.name)
