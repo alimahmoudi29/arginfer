@@ -521,8 +521,7 @@ class TestARG(unittest.TestCase):
         argnode = tsarg.arg
         argnode.dump(path = os.getcwd(),
                      file_name = 'pickle_out.arg')
-        loaded_arg = argbook.ARG().load(path = os.getcwd(),
-                                     file_name = 'pickle_out.arg')
+        loaded_arg = argbook.ARG().load(path = os.getcwd()+'/pickle_out.arg')
         for key in loaded_arg.nodes:
             self.assertEqual(argnode[key].index, loaded_arg[key].index)
             self.assertEqual(sorted(argnode[key].snps), sorted(loaded_arg[key].snps))
@@ -565,6 +564,20 @@ class TestARG(unittest.TestCase):
         arg_copy= arg.copy()
         self.assertTrue(arg.equal(arg_copy), True)
         self.assertFalse(arg==arg_copy, False)
+
+    def test_arg_total_tmrca(self):
+        recombination_rate=1e-8
+        Ne= 5000
+        sample_size = 5
+        length = 6e2
+        ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
+                            recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
+        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg.ts_to_argnode()
+        arg = tsarg.arg
+        tot_tmrca= arg.total_tmrca(length)
+        # print(tot_tmrca)
+
 
 class TestMCMC(unittest.TestCase):
 

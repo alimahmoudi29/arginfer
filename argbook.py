@@ -4,7 +4,7 @@ import math
 from sortedcontainers import SortedSet
 import bintrees
 import pickle
-
+import numpy as np
 
 class Segment(object):
 
@@ -738,17 +738,29 @@ class ARG(object):
         '''
         node = self.__getitem__(0)
         block = False
-
         while not block:
             node, block = self.find_tmrca(node, x)
         return node.time
 
+    def total_tmrca(self, sequence_length):
+        '''return the tmrca of all the sites in the ARG'''
+        break_points = self.breakpoints
+        break_points.add(0)
+        break_points.add(sequence_length)
+        tot_tmrca = np.zeros(int(sequence_length))
+        count =0
+        while count < len(break_points)-1:
+            x_tmrca= self.tmrca(break_points[count])
+            tot_tmrca[int(break_points[count]):int(break_points[count+1])] = x_tmrca
+            count +=1
+        return tot_tmrca
+
     @property
     def breakpoints(self):
-        br = bintrees.AVLTree()
+        br = SortedSet()
         for node in self.nodes.values():
             if node.breakpoint != None:
-                br[node.breakpoint] = node.breakpoint
+                br.add(node.breakpoint)
         return br
 
     #========== probabilites

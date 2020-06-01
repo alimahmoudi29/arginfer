@@ -2,25 +2,59 @@ import msprime
 import tskit
 import pandas as pd
 import shutil
+import os
+import sys
 import random
 import numpy as np
-
+f_dir = os.path.dirname(os.getcwd())#+"/ARGinfer"
+sys.path.append(f_dir)
+# print(sys.path)
+import treeSequence
+import math
+from tqdm import tqdm
 '''
 simulate data sets with different mu/r ratios from msprime
 
 ex: 
 python3 simulate.py --replicate 3 --ratios 1  \
- --mu 1e-8 --Ne 5000 -n 5 -L 1e3  \
+ --mu 1e-8 --Ne 5000 -n 5 -L 1e3 --generate --summary --tmrca \
 --out_path /Users/amahmoudi/Ali/phd/github_projects/mcmc/test1/ts_sim
 '''
 
-def get_ts_seq(ts):
+def get_true_tmrca(tsfull):
+    ts = tskit.TreeSequence.simplify(tsfull)
+    tmrca = np.zeros(int(ts.sequence_length))
+    for tree in ts.trees():
+        tmrca[int(tree.interval[0]):int(tree.interval[1])]= tree.time(tree.root)
+    return tmrca#wanted_tmrcas
+
+def get_true_features(ts_full, ratio, mut_rate, Ne, true_df):
+    '''get  likelihood, prior, posterior,
+    numancestral_rec, nonancestral_Rec,
+    total_rec, total_branch_Rec
+    and add to a dataframe
     '''
-    return the sequences simulated by msprime
-    '''
-    seqs=ts.genotype_matrix()
-    seqs= pd.DataFrame(seqs)
-    return(seqs)
+    try:
+        recomb_rate = float(mut_rate/ratio)
+        tsarg = treeSequence.TreeSeq(ts_full)
+
+        tsarg.ts_to_argnode()
+        data = treeSequence.get_arg_genotype(ts_full)
+        #----- true values
+        arg = tsarg.arg
+        log_lk = arg.log_likelihood(mut_rate, data)
+        log_prior = arg.log_prior(ts_full.sample_size, ts_full.sequence_length,
+                                            recomb_rate, Ne, False)
+        true_df.loc[0 if math.isnan(true_df.index.max())\
+                    else true_df.index.max() + 1] = [log_lk, log_prior, log_lk+log_prior,
+                                                    arg.num_ancestral_recomb,
+                                                    arg.num_nonancestral_recomb,
+                                                    arg.num_ancestral_recomb+ arg.num_nonancestral_recomb,
+                                                    arg.branch_length]
+    except:
+        true_df.loc[0 if math.isnan(true_df.index.max())\
+                else true_df.index.max() + 1] = [None for i in range(7)]
+    return true_df
 
 def simulate_ts(replicate, ratio, mut_rate, Ne, sample_size,
                 length, out_path):
@@ -59,21 +93,44 @@ def main(args):
     :param out_path:
     :return:
     '''
-    #------- mkdir
-    if not os.path.exists(args.out_path):
-            os.makedirs(args.out_path)
-    else:# if exists, first delete it and then create the directory
-        shutil.rmtree(args.out_path)
-        os.mkdir(args.out_path)
-    args.ratios = list(args.ratios)
-    for ratio in args.ratios:
-        ratio = int(ratio)
-        simulate_ts(replicate= args.replicate, ratio= ratio,
-                    mut_rate = args.mutation_rate, Ne= args.Ne,
-                    sample_size= args.sample_size,
-                    length= args.length,
-                    out_path= args.out_path+"/sim_r"+str(ratio))
-    print("==========DONE")
+    if args.generate:
+        #------- mkdir
+        if not os.path.exists(args.out_path):
+                os.makedirs(args.out_path)
+        else:# if exists, first delete it and then create the directory
+            shutil.rmtree(args.out_path)
+            os.mkdir(args.out_path)
+        args.ratios = list(args.ratios)
+        for ratio in args.ratios:
+            ratio = float(ratio)
+            if ratio == int(ratio):
+                ratio = int(ratio)
+            simulate_ts(replicate= args.replicate, ratio= ratio,
+                        mut_rate = args.mutation_rate, Ne= args.Ne,
+                        sample_size= args.sample_size,
+                        length= args.length,
+                        out_path= args.out_path+"/sim_r"+str(ratio))
+    if args.summary:
+        true_df = pd.DataFrame(columns=('likelihood', 'prior', "posterior",
+                                             'ancestral recomb', 'non ancestral recomb',
+                                                'total recomb', 'branch length'))
+        if not args.generate:
+            ratio = list(args.ratios)[0]
+            ratio = float(ratio)
+            if ratio == int(ratio):
+                ratio = int(ratio)
+        out_path = args.out_path+"/sim_r"+str(ratio)
+        for i in tqdm(range(args.replicate), ncols=100, ascii=False):
+        # for i in range(args.replicate):
+            name = "n"+str(args.sample_size)+"Ne"+str(int(args.Ne/1000))+"K_L"+ \
+                   str(int(args.length/1000))+"K"+ "_iter"+ str(i)
+            ts_full = msprime.load(out_path +"/"+name+".args")
+            true_df = get_true_features(ts_full, ratio, args.mutation_rate, args.Ne, true_df)
+            if args.tmrca:# tmrca
+                tmrca = get_true_tmrca(ts_full)
+                np.save(out_path + '/true_tmrca'+str(i)+'.npy', tmrca)
+        #save true df
+        true_df.to_hdf(out_path + "/true_summary.h5", key = "df")
 
 if __name__=='__main__':
     import argparse
@@ -86,6 +143,9 @@ if __name__=='__main__':
     parser.add_argument('--ratios', nargs='+',  default= 1, help= 'an array of the mutation/recomb rate ratios')
     parser.add_argument('--length', '-L',type=float, default= 1e4, help=' The sequence length')
     parser.add_argument('--out_path', '-O',type=str, default=os.getcwd(), help='The output path')
+    parser.add_argument( "--generate", help="if we want to simulate new ts", action="store_true")
+    parser.add_argument( "--summary", help="if we want to draw the summary of existing ts", action="store_true")
+    parser.add_argument( "--tmrca", help="if we need tmrca", action="store_true")
     args = parser.parse_args()
     main(args)
 

@@ -2917,4 +2917,3 @@ if __name__ == "__main__":
     pass
     mcmc = MCMC()
     mcmc.run(200, 1, 0, verify=False)
-

@@ -131,7 +131,7 @@ def main(args):
             '--iters', str(args.iterations),
             '--sample-step', str(args.sample_step),
             '--output', args.full_prefix]#the prefix for the output
-        assert os.stat(aw_in.name).st_size > 0,  "Initial .sites file is empty"
+        assert os.stat(aw_in.name).st_size > 0, "Initial .sites file is empty"
         logging.debug("running '{}'".format(" ".join(cmd)))
         subprocess.call(cmd)
         #now check that the smc file produced can be converted to nodes
@@ -174,9 +174,9 @@ def aw_infer():
     parser.add_argument('--sequence_length', '-l', type=float, default=55000,
                         help='the sequence length if a .trees file is not given')
     parser.add_argument('--recombination_rate', '-rho', type=float, default=1e-8,
-                        help='the recombination rate if a. trees file is not given')
+                        help='the recombination rate ')
     parser.add_argument('--mutation_rate', '-mu', type=float, default=1e-8,
-                        help='the mutation rate if a .trees file is not given')
+                        help='the mutation rate ')
     parser.add_argument('--random_seed', '-seed', type=int, default=1234,
                         help='a random seed for msprime & AW simulation')
     parser.add_argument('--outputdir', nargs="?", default=None,
