@@ -2730,7 +2730,7 @@ class MCMC(object):
         num = math.exp(-(float(x)-float(mean))**2/(2*var))
         return math.log(num/denom)
 
-    def update_parameters(self, mu= False, r= False, Ne= False):
+    def update_parameters(self, mu= False, r = False, Ne= False):
         sd_mu = 1e-8
         sd_r = 1e-8
         sd_N  = 100
@@ -2841,7 +2841,7 @@ class MCMC(object):
         #----test
         for it in tqdm(range(iteration), ncols=100, ascii=False):
         # while it < iteration:
-            self.run_transition(w = [1, 1, 1, 5, 1, 4, 0])
+            self.run_transition(w = [1, 1, 1, 5, 1, 4, 1])
             if self.accept:
                 accepted += 1
             if it > burn and it % thin == 0:

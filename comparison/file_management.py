@@ -1,9 +1,9 @@
 from plot import *
-
+from tqdm import tqdm
 '''
 python  file_management.py --replicate 162 \
     --general_path "/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K" \
-    --read_summary_mf 
+    --read_summary_mf --argweaver
 '''
 
 def read_summary_multiple_folder(replicate, general_path, argweaver = False):
@@ -22,9 +22,9 @@ def read_summary_multiple_folder(replicate, general_path, argweaver = False):
                                             'upper branch length','std branch length',
                                             'lower total recomb','total recomb','upper total recomb',
                                             'std total recomb'))
-        for i in range(replicate):
+        for i in tqdm(range(replicate), ncols=100, ascii=False):
+        # for i in range(replicate):
             out_path = general_path+"/out" +str(i)
-            print("/out" +str(i))
             if os.path.isfile(out_path+"/summary.h5"):
                 f = Figure(out_path)
                 df= f.data
@@ -54,9 +54,9 @@ def read_summary_multiple_folder(replicate, general_path, argweaver = False):
                                             'std total recomb',
                                             'lower branch length', 'branch length',
                                             'upper branch length', 'std branch length'])
-        for i in range(replicate):
+        for i in tqdm(range(replicate), ncols=100, ascii=False):
+        # for i in range(replicate):
             out_path = general_path+"/out" +str(i)
-            print("/out" +str(i))
             if os.path.isfile(out_path+"/out.stats"):
                 f= Figure(out_path, argweaver = argweaver)
                 stats_df = f.data
@@ -90,7 +90,7 @@ def main(args):
 if __name__=='__main__':
     import argparse
     import os
-    parser = argparse.ArgumentParser(prog="sim_ts",description='simulate datasets from ts')
+    parser = argparse.ArgumentParser(prog="",description='')
     parser.add_argument('--replicate', type = int,default=10,help='number of data sets for each ratio')
     parser.add_argument('--general_path', '-O',type=str, default=os.getcwd(), help='The output path')
     parser.add_argument( "--argweaver", help="manage the argweaver output, otherwise arginfer", action="store_true")

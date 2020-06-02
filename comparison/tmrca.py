@@ -9,7 +9,7 @@ sys.path.append(f_dir)
 import argbook
 
 '''
-python tmrca.py --general_path '/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K/out0' \
+python tmrca.py --general_path '/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r4/out5' \
  --seq_length 1e5 \
  -d   /home/amahmoudi/miniconda3/envs/py27/bin \
  --arginfer_tmrca

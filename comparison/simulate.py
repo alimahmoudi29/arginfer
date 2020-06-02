@@ -16,7 +16,7 @@ from tqdm import tqdm
 simulate data sets with different mu/r ratios from msprime
 
 ex: 
-python3 simulate.py --replicate 3 --ratios 1  \
+python3 simulate.py --replicate 200 --ratios 0.5  \
  --mu 1e-8 --Ne 5000 -n 5 -L 1e3 --generate --summary --tmrca \
 --out_path /Users/amahmoudi/Ali/phd/github_projects/mcmc/test1/ts_sim
 '''

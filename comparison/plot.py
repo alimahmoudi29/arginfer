@@ -126,7 +126,6 @@ class Trace(Figure):
         self.save(figure_name="argweavertrace" + time.strftime("%Y%m%d-%H%M%S"))
         plt.show()
 
-
 class Scatter(object):
 
     def __init__(self, truth_path, inferred_path,
@@ -300,23 +299,22 @@ def plot_tmrca(truth_path ='', argweaver_path='', arginfer_path='',
     print("arginfer pearson_coef", pearson_coef1, "p_value", p_value1)
     print("argweaver pearson_coef", pearson_coef2, "p_value", p_value2)
 
-
 if __name__=='__main__':
-    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
-    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K',
-    #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
-    # s.multi_scatter(CI=True, argweaver= False)
-    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
-    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
-    #            columns=["branch length", 'total recomb', "ancestral recomb"])
-    # s.multi_scatter(CI=True, argweaver= True)
+    s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/second/sim_r0.5',
+               inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r0.5',
+               columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
+    s.multi_scatter(CI=True, argweaver= False)
+    s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/second/sim_r0.5',
+               inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r0.5/n10L100K',
+               columns=["branch length", 'total recomb', "ancestral recomb"])
+    s.multi_scatter(CI=True, argweaver= True)
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r2',
     #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'], std=True)
     # s.multi_std()
-    plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r2/true_tmrca10.npy',
-                   arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r2/out10',
-                    argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out10',
-                   inferred_filename='tmrca.h5')
+    # plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4/true_tmrca7.npy',
+    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r4/out7',
+    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K/out7',
+    #                inferred_filename='tmrca.h5')
 
 

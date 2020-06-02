@@ -59,9 +59,9 @@ def run_mcmc(args):
     if args.plot:
         p= comparison.plot.Trace(outpath, name= "summary")
         p.arginfer_trace()
-    # if args.plot:
-    #     p = plot_summary(outpath)
-    #     p.plot()
+    if args.plot:
+        p = plot_summary(outpath)
+        p.plot()
     if args.verbose:
         mcmc.print_state()
 
