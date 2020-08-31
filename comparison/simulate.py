@@ -6,10 +6,12 @@ import os
 import sys
 import random
 import numpy as np
-f_dir = os.path.dirname(os.getcwd())#+"/ARGinfer"
+
+f_dir = os.path.dirname(os.getcwd())+"/ARGinfer"
 sys.path.append(f_dir)
 # print(sys.path)
 import treeSequence
+
 import math
 from tqdm import tqdm
 '''

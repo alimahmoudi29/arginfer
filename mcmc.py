@@ -173,6 +173,10 @@ class MCMC(object):
         self.detail_acceptance = collections.defaultdict(list)# transiton:[total, accepted]
         #---------- current ARG
         self.original_ARG = copy.deepcopy(self.arg) #  self.arg.copy()
+        # for sd in update parameters
+        self.default_mutation_rate = mutation_rate
+        self.default_recombination_rate = recombination_rate
+        self.default_Ne = Ne
 
     def get_initial_arg(self):
         '''
@@ -2727,14 +2731,14 @@ class MCMC(object):
     def normal_log_pdf(self, mean, sd, x):
         var = float(sd)**2
         denom = (2*math.pi*var)**0.5
-        num = math.exp(-(float(x)-float(mean))**2/(2*var))
+        num = math.exp((-(float(x)-float(mean))**2)/(2*var))
         return math.log(num/denom)
 
     def update_parameters(self, mu= False, r = False, Ne= False):
-        sd_mu = 1e-8
-        sd_r = 1e-8
-        sd_N  = 100
-        N0 = 5000
+        sd_mu = self.default_mutation_rate/4
+        sd_r = self.default_recombination_rate/4
+        sd_N  = 5
+        N0 = self.default_Ne
         # propose mu
         new_mu = self.mu
         new_r= self.r
@@ -2751,21 +2755,22 @@ class MCMC(object):
         #------- MH
         self.accept = False
         ratio = new_log_lk + new_log_prior + \
-                self.normal_log_pdf(1e-8, sd_r, new_r)+\
-                self.normal_log_pdf(1e-8, sd_mu, new_mu)+\
-                self.normal_log_pdf(N0, sd_N, new_N)+\
+                self.normal_log_pdf(new_r, sd_r, self.r)+\
+                self.normal_log_pdf(new_mu, sd_mu, self.mu)+\
+                self.normal_log_pdf(new_N, sd_N, self.Ne)+\
                 self.transition_prob.log_prob_reverse - \
                 (self.log_lk + self.log_prior +
                  self.transition_prob.log_prob_forward +\
-                 self.normal_log_pdf(1e-8, sd_r, self.r)+\
-                self.normal_log_pdf(1e-8, sd_mu, self.mu)+\
-                self.normal_log_pdf(N0, sd_N, self.Ne))
+                 self.normal_log_pdf(self.r, sd_r, new_r)+\
+                self.normal_log_pdf(self.mu, sd_mu, new_mu)+\
+                self.normal_log_pdf(self.Ne, sd_N, new_N))
         if  self.verbose:
             print("forward_prob:", self.transition_prob.log_prob_forward)
             print("reverse_prob:", self.transition_prob.log_prob_reverse)
             print("ratio:", ratio)
             print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
             print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
+
         if math.log(random.random()) <= ratio: # accept
             self.log_lk = new_log_lk
             self.log_prior = new_log_prior
@@ -2820,7 +2825,7 @@ class MCMC(object):
             self.kuhner()
         elif ind == 6:
             # print("---------update_parameters")
-            self.update_parameters(True, True, True)
+            self.update_parameters(True, True, False)
         # elif ind == 7:
         #     print("---------update_rho")
         #     self.update_parameters(r=True)
@@ -2839,7 +2844,7 @@ class MCMC(object):
         #---test #1 for no division by zero
         self.detail_acceptance = {i:[1, 0] for i in range(9)}
         #----test
-        for it in tqdm(range(iteration), ncols=100, ascii=False):
+        for it in tqdm(range(iteration), ncols=100, ascii=False):#
         # while it < iteration:
             self.run_transition(w = [1, 1, 1, 5, 1, 4, 1])
             if self.accept:

@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import time
 import math
+from scipy import stats
 
 class Figure(object):
     """
@@ -129,15 +130,19 @@ class Trace(Figure):
 class Scatter(object):
 
     def __init__(self, truth_path, inferred_path,
-                 columns =["likelihood","prior", "posterior", "branch length"], std= False):
+                 columns = ["likelihood","prior", "posterior", "branch length"], std = False):
         self.columns = columns
         self.truth_path = truth_path
         self.inferred_path = inferred_path
-        if len(self.columns)/2 >=1:
+        if len(self.columns)/2 > 1:
             plot_dimension =[math.ceil(len(self.columns)/2),2]
+        elif len(self.columns)/2 == 1:# adjust size
+            plot_dimension =[2,2]#math.ceil(len(self.columns)/2)
+            # plt.rcParams["figure.figsize"] = (4,1.5)
         else:
             plot_dimension =[1, 1]
         self.fig = plt.figure(tight_layout=False)
+        print("plot size in inch:",plt.rcParams.get('figure.figsize'))
         self.gs = gridspec.GridSpec(int(plot_dimension[0]), int(plot_dimension[1]))
         if not std:
             self.truth_data = pd.read_hdf(self.truth_path +  "/true_summary.h5", mode="r")
@@ -148,11 +153,11 @@ class Scatter(object):
         #row indexes with not None values
         self.not_None_rows = np.where(self.inferred_data['prior'].notnull())[0]
 
-    def single_scatter(self, column_index, CI = False, argweaver= False):
+    def single_scatter(self, column_index, CI = False, argweaver= False, coverage =True):
         line_color= "red"
         point_color= "black"
         ecolor = "purple"
-        elinewidth =1
+        elinewidth =0.9
         self.gs.update(wspace=0.3, hspace=0.7) # set the spacing between axes.
         if column_index <2:
             ax = self.fig.add_subplot(self.gs[0, column_index])
@@ -169,7 +174,7 @@ class Scatter(object):
         if not CI:
             ax.errorbar(self.truth_data.loc[self.not_None_rows][self.columns[column_index]],
                             self.inferred_data.loc[self.not_None_rows][col],
-                            color = point_color,linestyle='', fmt="o")
+                            color = point_color,linestyle='', fmt=".")#fmt="o"
         else:
             ax.errorbar(self.truth_data.loc[self.not_None_rows][self.columns[column_index]],
                         self.inferred_data.loc[self.not_None_rows][col],
@@ -177,7 +182,7 @@ class Scatter(object):
                                self.inferred_data.loc[self.not_None_rows]['lower '+col],
                                self.inferred_data.loc[self.not_None_rows]['upper '+col] -
                                self.inferred_data.loc[self.not_None_rows][col]],
-                                                            linestyle='', fmt="o",color= point_color,
+                                                            linestyle='', fmt=".",color= point_color,
                                                             ecolor= ecolor, elinewidth=elinewidth)
             # ax.set_aspect('equal',adjustable="box")
         minimum = np.min((ax.get_xlim(),ax.get_ylim()))
@@ -188,17 +193,42 @@ class Scatter(object):
         ax.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
         ax.ticklabel_format(style='sci',scilimits=(-2,2),axis='x')
         ax.plot([minimum, maximum], [minimum, maximum], ls="--",  color= line_color)
+        if coverage:
+            truth = self.truth_data.loc[self.not_None_rows][self.columns[column_index]].tolist()
+            num_data = len(truth)
+            print("total_number of datasets: ", num_data)
+            lower25 = self.inferred_data.loc[self.not_None_rows]['lower25 '+col].tolist()
+            upper75 = self.inferred_data.loc[self.not_None_rows]['upper75 '+col].tolist()
+            assert len(truth) == len(lower25)
+            assert len(upper75) == len(truth)
+            count = 0
+            for item in range(len(truth)):
+                if (lower25[item] <= truth[item]) and \
+                        (truth[item] <=upper75[item] ):
+                    count +=1
+            if (count/num_data) >= 0.5:
+                pval = min(1, 2*( 1- stats.binom(n= num_data, p =0.5).cdf(x=count-1)))
+            else:
+                pval = 2*(stats.binom(n= num_data, p =0.5).cdf(x=count))
+            print("50 percent coverage for ", col," is ", count/num_data, "with pvalue", pval)
 
-    def multi_scatter(self, CI = False, argweaver = False):
+    def multi_scatter(self, CI = False, argweaver = False, coverage=True):
+        '''
+        :param CI: if True--> plot 95 percent interval
+        :param argweaver: if True, plot the argweaver output otherwise ARGinfer
+        both_inferred: if true draw ARGinfer versus ARGweaver
+        :param coverage: provide the coverage of 50% interval
+        :return:
+        '''
         for ind in range(len(self.columns)):
-            self.single_scatter(column_index=ind, CI= CI, argweaver= argweaver)
-
+            self.single_scatter(column_index=ind, CI= CI,
+                                argweaver= argweaver, coverage = coverage)
         if not argweaver:
             self.fig.suptitle("ARGinfer")
-            figure_name= "scatter"+"ARGinfer"
+            figure_name= "scatter"+"ARGinferr"
         else:
             self.fig.suptitle("ARGweaver")
-            figure_name= "scatter"+"ARGweaver"
+            figure_name= "scatter"+"ARGweaver2"
         if CI:
             figure_name = figure_name+"CI"
         plt.savefig(self.inferred_path+"/{}.pdf".format(figure_name),
@@ -300,14 +330,14 @@ def plot_tmrca(truth_path ='', argweaver_path='', arginfer_path='',
     print("argweaver pearson_coef", pearson_coef2, "p_value", p_value2)
 
 if __name__=='__main__':
-    s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/second/sim_r0.5',
-               inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r0.5',
-               columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
-    s.multi_scatter(CI=True, argweaver= False)
-    s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/second/sim_r0.5',
-               inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r0.5/n10L100K',
-               columns=["branch length", 'total recomb', "ancestral recomb"])
-    s.multi_scatter(CI=True, argweaver= True)
+    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
+    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r4',
+    #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
+    # s.multi_scatter(CI=True, argweaver= False, coverage = True)
+    s= Scatter(truth_path = '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
+               inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
+               columns=["branch length", "ancestral recomb"])
+    s.multi_scatter(CI=True, argweaver= True, coverage = True)
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r2',
     #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'], std=True)
