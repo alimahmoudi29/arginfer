@@ -202,15 +202,18 @@ class Scatter(object):
             assert len(truth) == len(lower25)
             assert len(upper75) == len(truth)
             count = 0
+            average_length =[] # average length of 50% intervals
             for item in range(len(truth)):
+                average_length.append(upper75[item]-lower25[item])
                 if (lower25[item] <= truth[item]) and \
-                        (truth[item] <=upper75[item] ):
+                        (truth[item] <= upper75[item]):
                     count +=1
             if (count/num_data) >= 0.5:
-                pval = min(1, 2*( 1- stats.binom(n= num_data, p =0.5).cdf(x=count-1)))
+                pval = min(1, 2*(1- stats.binom(n= num_data, p =0.5).cdf(x=count-1)))
             else:
                 pval = 2*(stats.binom(n= num_data, p =0.5).cdf(x=count))
             print("50 percent coverage for ", col," is ", count/num_data, "with pvalue", pval)
+            print("The average length for 50 percent interval is ", np.mean(average_length))
 
     def multi_scatter(self, CI = False, argweaver = False, coverage=True):
         '''
@@ -329,15 +332,140 @@ def plot_tmrca(truth_path ='', argweaver_path='', arginfer_path='',
     print("arginfer pearson_coef", pearson_coef1, "p_value", p_value1)
     print("argweaver pearson_coef", pearson_coef2, "p_value", p_value2)
 
+# def plot_interval1(argweaver_path=' ', arginfer_path=' ',
+#                           columns=["branch length", "ancestral recomb"]):
+#     arginfer_data = pd.read_hdf(arginfer_path + '/summary_all.h5', mode="r")
+#     weaver_data = pd.read_hdf(argweaver_path + "/summary_all.h5", mode="r")
+#     not_None_rows = np.where(arginfer_data['prior'].notnull())[0]
+#     arginfer_data = arginfer_data.loc[not_None_rows, : ]
+#     weaver_data = weaver_data.loc[not_None_rows, : ]
+#     arginfer_data = arginfer_data.reset_index()
+#     weaver_data = weaver_data.reset_index()
+#     distance= 0.65
+#     colors =["darkgreen", "m"]
+#     linewidth = 0.75
+#     fig = plt.figure(tight_layout=False)
+#     gs = gridspec.GridSpec(2, 1)
+#     #arginfer
+#     ax1 = fig.add_subplot(gs[0, 0])
+#     for i in range(min(150,arginfer_data.shape[0])):
+#         ax1.vlines(i+1, arginfer_data.loc[i, "lower25 branch length"],
+#                    arginfer_data.loc[i, "upper75 branch length"],
+#                    linestyles ="solid", colors =colors[0], linewidth= linewidth, label="infer")#dashed
+#         ax1.vlines(i+1+distance, weaver_data.loc[i, "lower25 branch length"],
+#                    weaver_data.loc[i, "upper75 branch length"],
+#                    linestyles ="solid", colors =colors[1], linewidth= linewidth, label = "weaver")
+#     # ax1.legend(labelspacing=0,loc='upper right',frameon=False)
+#     ax1.set_ylabel("50% CI")
+#     ax1.set_xlabel('Data set')
+#     ax1.set_title("Total branch length")
+#     #scientific number
+#     ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+#     ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+#     #argweaver
+#     ax2 = fig.add_subplot(gs[1, 0])#, sharey=ax1
+#     for i in range(min(arginfer_data.shape[0], 150)):
+#         ax2.vlines(i+1, arginfer_data.loc[i, "lower25 ancestral recomb"],
+#                    arginfer_data.loc[i, "upper75 ancestral recomb"],
+#                    linestyles ="solid", colors =colors[0], linewidth= linewidth, label= "infer")
+#         ax2.vlines(i+1+distance, weaver_data.loc[i, "lower25 total recomb"],
+#                    weaver_data.loc[i, "upper75 total recomb"],
+#                    linestyles ="solid", colors =colors[1], linewidth= linewidth, label = "weaver")
+#     # ax1.legend(labelspacing=0,loc='upper right',frameon=False)
+#     ax2.set_ylabel("50% CI")
+#     ax2.set_xlabel('Data set')
+#     ax2.set_title("Ancestral recombination")
+#     #scientific number
+#     ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+#     ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+#     # ax2.legend( labelspacing=0,loc='upper right',frameon=False)
+#     #scientific number
+#     # fig.legend(loc = 'best')#upper right
+#
+#     figure_name= "interval_50_combined"
+#     plt.savefig(arginfer_path+"/{}.pdf".format(figure_name),
+#                 bbox_inches='tight', dpi=400)
+#     plt.close()
+
+def plot_interval(true_path = '', argweaver_path=' ', arginfer_path=' ',
+                          columns=["branch length", "ancestral recomb"]):
+    true_data = pd.read_hdf(true_path +  "/true_summary.h5", mode="r")
+    arginfer_data = pd.read_hdf(arginfer_path + '/summary_all.h5', mode="r")
+    weaver_data = pd.read_hdf(argweaver_path + "/summary_all.h5", mode="r")
+    not_None_rows = np.where(arginfer_data['prior'].notnull())[0]
+    def modify_df(df, keep_rows):
+        '''remove rows with NA and reset the indeces'''
+        df = df.loc[keep_rows, : ]
+        df = df.reset_index()
+        return df
+    arginfer_data = modify_df(arginfer_data, not_None_rows)
+    weaver_data = modify_df(weaver_data, not_None_rows)
+    true_data = modify_df(true_data, not_None_rows)
+    colors =["black", "b", "red"]
+    labels = ["True","ARGinfer", "ARGweaver"]
+    num_data=150
+    linewidth = 0.2
+    alpha = 0.4
+    fig = plt.figure(tight_layout=False)
+    gs = gridspec.GridSpec(2, 1)
+    # plt.title("R = 1")
+    #arginfer
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.plot(range(num_data),#arginfer_data.shape[0]
+                  true_data.loc[range(num_data),"branch length"],
+                  color= colors[0], label = labels[0], linewidth=linewidth)
+    ax1.fill_between(range(num_data),
+                     arginfer_data.loc[range(num_data), "lower25 branch length"],
+                     arginfer_data.loc[range(num_data),"upper75 branch length"],
+                     color=colors[1], alpha=alpha, label = labels[1])
+    ax1.fill_between(range(num_data),
+                     weaver_data.loc[range(num_data),"lower25 branch length"],
+                     weaver_data.loc[range(num_data),"upper75 branch length"],
+                     color=colors[2], alpha=alpha, label = labels[2])
+    ax1.set_ylabel("branch length 50% CI")
+    # ax1.set_xlabel('data sets')
+    ax1.set_title("R = 4")
+    # plt.title("R = 1")
+    #scientific number
+    ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+    # ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+    #argweaver
+    ax2 = fig.add_subplot(gs[1, 0])#, sharey=ax1
+    ax2.plot(range(num_data),
+                  true_data.loc[range(num_data), "ancestral recomb"],
+                  color= colors[0],  linewidth=linewidth)
+    ax2.fill_between(range(num_data),
+                     arginfer_data.loc[range(num_data),"lower25 ancestral recomb"],
+                     arginfer_data.loc[range(num_data),"upper75 ancestral recomb"],
+                     color=colors[1], alpha=alpha)#lightcoral
+    ax2.fill_between(range(num_data),
+                     weaver_data.loc[range(num_data),"lower25 total recomb"],
+                     weaver_data.loc[range(num_data),"upper75 total recomb"],
+                     color=colors[2], alpha=alpha)
+    # ax1.legend(labelspacing=0,loc='upper right',frameon=False)
+    ax2.set_ylabel("anc recomb 50% CI")
+    ax2.set_xlabel('data sets')
+    # ax2.set_title("Ancestral recombination")
+    #scientific number
+    # ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+    # ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+    # ax2.legend( labelspacing=0,loc='upper right',frameon=False)
+    #scientific number
+    fig.legend(loc = 'upper right', ncol=3)#best#
+    figure_name= "interval_50_combined"
+    plt.savefig(arginfer_path+"/{}.pdf".format(figure_name),
+                bbox_inches='tight', dpi=400)
+    plt.close()
+
 if __name__=='__main__':
-    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
-    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r4',
+    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
+    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K',
     #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
     # s.multi_scatter(CI=True, argweaver= False, coverage = True)
-    s= Scatter(truth_path = '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
-               inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
-               columns=["branch length", "ancestral recomb"])
-    s.multi_scatter(CI=True, argweaver= True, coverage = True)
+    # s= Scatter(truth_path = '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
+    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
+    #            columns=["branch length", "ancestral recomb"])
+    # s.multi_scatter(CI=True, argweaver= True, coverage = True)
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r2',
     #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'], std=True)
@@ -347,4 +475,7 @@ if __name__=='__main__':
     #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K/out7',
     #                inferred_filename='tmrca.h5')
 
-
+    plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
+                    argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
+                  arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r4',
+                          columns=["branch length", "ancestral recomb"])
