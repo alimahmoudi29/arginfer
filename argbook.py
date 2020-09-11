@@ -807,7 +807,7 @@ class ARG(object):
                 potential_branch_length = node.tree_node_age(x)
                 ret += math.log(potential_branch_length / total_material)
             # # verify the mutation is on the correct spot
-            verify_mutation_node(node, data)
+            # verify_mutation_node(node, data)
         return ret
 
     def log_prior(self, sample_size, sequence_length, recombination_rate, Ne,

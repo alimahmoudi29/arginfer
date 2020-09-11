@@ -9,6 +9,7 @@ import matplotlib.gridspec as gridspec
 import time
 import math
 from scipy import stats
+import seaborn as sns
 
 class Figure(object):
     """
@@ -424,7 +425,7 @@ def plot_interval(true_path = '', argweaver_path=' ', arginfer_path=' ',
                      color=colors[2], alpha=alpha, label = labels[2])
     ax1.set_ylabel("branch length 50% CI")
     # ax1.set_xlabel('data sets')
-    ax1.set_title("R = 4")
+    ax1.set_title("R = 1")
     # plt.title("R = 1")
     #scientific number
     ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
@@ -457,6 +458,74 @@ def plot_interval(true_path = '', argweaver_path=' ', arginfer_path=' ',
                 bbox_inches='tight', dpi=400)
     plt.close()
 
+def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K',
+                    argweaver_general_path=' ',
+                    arginfer_general_path=' '):
+
+    trueR1_path= true_general_path+"/sim_r1"
+    trueR2_path= true_general_path+"/sim_r2"
+    trueR4_path= true_general_path+"/sim_r4"
+    weaverR1_path = argweaver_general_path+"/r1/n10L100K"
+    weaverR2_path = argweaver_general_path+"/r2/n10L100K"
+    weaverR4_path = argweaver_general_path+"/r4/n10L100K"
+    inferR1_path = arginfer_general_path+ "/n10L100K"
+    inferR2_path = arginfer_general_path+ "/n10L100K_r2"
+    inferR4_path = arginfer_general_path+ "/n10L100K_r4"
+    def modify_df(infer_df, weaver_df, keep_rows, R =1):
+        '''remove rows with NA and reset the indeces'''
+        infer_df = infer_df[["branch length", "ancestral recomb"]]
+        weaver_df = weaver_df[["branch length", "total recomb"]]
+        infer_df = infer_df.loc[keep_rows, : ]
+        weaver_df = weaver_df.loc[keep_rows, : ]
+        weaver_df["ancestral recomb"] = weaver_df["total recomb"]
+        del weaver_df["total recomb"]
+        weaver_df["model"] ="ARGweaver"
+        infer_df["model"] = "ARGinfer"
+        both_df = pd.concat((infer_df, weaver_df))
+        both_df["R"] = R
+        both_df["recombination rate"] = both_df["ancestral recomb"]/both_df["branch length"]
+        return both_df
+    #R1 data
+    # "/true_summary.h5", mode="r"
+
+    inferR1_data = pd.read_hdf(inferR1_path + '/summary_all.h5', mode="r")
+    weaverR1_data = pd.read_hdf(weaverR1_path + "/summary_all.h5", mode="r")
+    not_None_rowsR1 = np.where(inferR1_data['prior'].notnull())[0]
+    R1_data = modify_df(inferR1_data,weaverR1_data, not_None_rowsR1, R=1)
+    true_R1= pd.read_hdf(trueR1_path + '/true_summary.h5', mode="r")
+    true_R1= true_R1.loc[not_None_rowsR1, : ]
+
+    # R2 data
+    inferR2_data = pd.read_hdf(inferR2_path + '/summary_all.h5', mode="r")
+    weaverR2_data = pd.read_hdf(weaverR2_path + "/summary_all.h5", mode="r")
+    not_None_rowsR2 = np.where(inferR2_data['prior'].notnull())[0]
+    R2_data = modify_df(inferR2_data,weaverR2_data, not_None_rowsR2, R=2)
+    true_R2= pd.read_hdf(trueR2_path + '/true_summary.h5', mode="r")
+    true_R2= true_R2.loc[not_None_rowsR2, : ]
+    #-- R4
+    inferR4_data = pd.read_hdf(inferR4_path + '/summary_all.h5', mode="r")
+    weaverR4_data = pd.read_hdf(weaverR4_path + "/summary_all.h5", mode="r")
+    not_None_rowsR4 = np.where(inferR4_data['prior'].notnull())[0]
+    R4_data = modify_df(inferR4_data,weaverR4_data, not_None_rowsR4, R=4)
+    true_R4= pd.read_hdf(trueR4_path + '/true_summary.h5', mode="r")
+    true_R4= true_R4.loc[not_None_rowsR4, : ]
+
+    #------combine all together
+    data_df= pd.concat((R1_data, R2_data,R4_data))
+    sns.boxplot(x='R', y='recombination rate', hue='model', data=data_df)
+    plt.axhline(y= np.mean(true_R1["ancestral recomb"]/true_R1["branch length"]),
+                linewidth=1, color='r', linestyle = "--", xmin=0, xmax=.5)#1e-8
+    plt.axhline(y=np.mean(true_R2["ancestral recomb"]/true_R2["branch length"]),
+                linewidth=1, color='r', linestyle = "--", xmin=0, xmax=.8)#0.5e-8
+    plt.axhline(y=np.mean(true_R4["ancestral recomb"]/true_R4["branch length"]),
+                linewidth=1, color='r', linestyle = "--", xmin=0, xmax=1)#0.25e-8
+    plt.legend(loc='upper right')
+    figure_name= "recombRateBoxplot"
+    plt.title("Box plot of recombination rate")
+    plt.savefig(inferR1_path+"/{}.pdf".format(figure_name),
+                bbox_inches='tight', dpi=400)
+
+
 if __name__=='__main__':
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K',
@@ -475,7 +544,10 @@ if __name__=='__main__':
     #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K/out7',
     #                inferred_filename='tmrca.h5')
 
-    plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
-                    argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
-                  arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r4',
-                          columns=["branch length", "ancestral recomb"])
+    # plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
+    #                 argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
+    #               arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K',
+    #                       columns=["branch length", "ancestral recomb"])
+
+    recrate_boxplot(argweaver_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw',
+                    arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer')

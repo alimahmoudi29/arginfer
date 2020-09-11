@@ -128,6 +128,8 @@ def main(args):
             '--overwrite',
             '--randseed', str(int(args.random_seed)),
             '--infsites',
+            '--ntimes', str(2000),
+            '--compress-seq', str(1),
             '--iters', str(args.iterations),
             '--sample-step', str(args.sample_step),
             '--output', args.full_prefix]#the prefix for the output

@@ -4,7 +4,7 @@ from plots import *
 import comparison.plot
 
 '''
-python3 main.py -I 20000 --thin 20 --burn 10000 -n 5 -L 1e4  --Ne 5000 -r 1e-8 -mu 1e-8 \
+python3 main.py -I 10000 --thin 20 --burn 0 -n 5 -L 1e3  --Ne 5000 -r 1e-8 -mu 1e-8 \
         --tsfull /Users/amahmoudi/Ali/phd/github_projects/mcmc/test1/ts_sim/sim_r1/n5Ne5K_L1K_iter0.args \
         -O /Users/amahmoudi/Ali/phd/github_projects/mcmc/ARGinfer/output \
         --random-seed 5 -p -v --verify
@@ -54,7 +54,7 @@ def run_mcmc(args):
             tsfull = msprime.load(args.tsfull)
     # random.seed(args.random_seed)
     # np.random.seed(args.random_seed+1)
-    mcmc = MCMC(tsfull, n, Ne, seq_length, mu , r, data, outpath, args.verbose)
+    mcmc = MCMC(tsfull, n, Ne, seq_length, mu, r, data, outpath, args.verbose)
     mcmc.run(iteration, thin, burn, args.verify)
     if args.plot:
         p= comparison.plot.Trace(outpath, name= "summary")
