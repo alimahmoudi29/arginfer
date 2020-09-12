@@ -1,12 +1,26 @@
 from plot import *
 from tqdm import tqdm
 '''
+after ARGinfer, or ARGweaver done for multiple data sets!
+ this is used to summarise the info of 
+all the data sets in a df file called summary_all.h5. In fact, 
+this file is 
+a summary of all the individual summaries for each data set:
+
+For ARGinfer: 
+python  file_management.py --replicate 162 \
+    --general_path "/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4" \
+    --read_summary_mf 
+    
+#--------------------------------------
+For ARGweaver:
 python  file_management.py --replicate 162 \
     --general_path "/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K" \
     --read_summary_mf --argweaver
 '''
 
-def read_summary_multiple_folder(replicate, general_path, argweaver = False):
+def read_summary_multiple_folder(replicate, general_path,
+                                 argweaver = False):
     '''read the summary of the posterior samples which are in
     multiple folders, output the mean of samples in a pandas_df
      '''
@@ -116,3 +130,4 @@ if __name__=='__main__':
     parser.add_argument( "--read_summary_mf", help="read_summary_multiple_folder function", action="store_true")
     args = parser.parse_args()
     main(args)
+

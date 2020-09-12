@@ -5,6 +5,7 @@ from sortedcontainers import SortedSet
 import bintrees
 import pickle
 import numpy as np
+import pandas as pd
 
 class Segment(object):
 
@@ -271,10 +272,13 @@ class Node(object):
                 block = False
                 return self.left_parent, block
 
-    def tree_node_age(self, x):
+    def tree_node_age(self, x, return_parent_time= False):
         '''
         the tree branch length of
         node self, at position x
+        :param x the site
+        :param return_parent_time: if we only want to
+            report parent time ---> in the case of alelle age
          '''
         node = self
         child_time = node.time
@@ -282,7 +286,10 @@ class Node(object):
         while not block:
             node, block = node.upward_path(x)
         assert node.time - child_time > 0
-        return node.time - child_time
+        if not return_parent_time:
+            return node.time - child_time
+        else:
+            return node.time
 
     def sibling(self):
         '''
@@ -754,6 +761,32 @@ class ARG(object):
             tot_tmrca[int(break_points[count]):int(break_points[count+1])] = x_tmrca
             count +=1
         return tot_tmrca
+
+    def allele_age(self):
+        ''':return a pd df with four columns:
+            1. site: the genomic position of the SNP
+            2. recent age: the most recent age for the allele
+            3. mid age: the midpoint of node age and its parent (tree node) time
+            4. latest age: the latest time (back in time) for the mutation
+            The df is sorted based on site.
+         '''
+        #find the nodes with mutations
+        snp_nodes = [] # nodes with len(snps) > 0
+        for node in self.nodes.values():
+            if node.snps:
+                snp_nodes.append(node)
+        # now for each node and find age for each mut
+        age_df = pd.DataFrame(columns=["site", "recent age", "mid age", "latest age"])
+        for node in snp_nodes:
+            # num_branches = collections.defaultdict(list)
+            node_time = node.time
+            for x in node.snps:
+                parent_age = node.tree_node_age(x, return_parent_time=True)
+                age_df.loc[age_df.shape[0]] =[x, node_time,
+                                              (node_time+parent_age)/2, parent_age]
+        age_df.sort_values(by=['site'], ascending=True, inplace=True)
+        age_df.reset_index(inplace=True, drop=True)
+        return age_df
 
     @property
     def breakpoints(self):

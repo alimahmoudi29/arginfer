@@ -397,32 +397,42 @@ def plot_interval(true_path = '', argweaver_path=' ', arginfer_path=' ',
     def modify_df(df, keep_rows):
         '''remove rows with NA and reset the indeces'''
         df = df.loc[keep_rows, : ]
-        df = df.reset_index()
+        df.reset_index(inplace=True, drop=True)
         return df
     arginfer_data = modify_df(arginfer_data, not_None_rows)
     weaver_data = modify_df(weaver_data, not_None_rows)
     true_data = modify_df(true_data, not_None_rows)
-    colors =["black", "b", "red"]
+    colors =["black", "red","blue"]
     labels = ["True","ARGinfer", "ARGweaver"]
     num_data=150
-    linewidth = 0.2
-    alpha = 0.4
+    linewidth = 0.6
+    alpha = 0.5
     fig = plt.figure(tight_layout=False)
     gs = gridspec.GridSpec(2, 1)
     # plt.title("R = 1")
     #arginfer
+    #------ lets first sort data ascending
+    true_data.sort_values(by=["branch length"], ascending=True, inplace=True)
+    new_index= true_data.index.tolist()
+    true_data.reset_index(inplace=True, drop=True)
+    #---- reindex the other two based on this
+    arginfer_data = arginfer_data.reindex(new_index)
+    arginfer_data.reset_index(inplace=True, drop=True)
+    weaver_data = weaver_data.reindex(new_index)
+    weaver_data.reset_index(inplace=True, drop=True)
     ax1 = fig.add_subplot(gs[0, 0])
     ax1.plot(range(num_data),#arginfer_data.shape[0]
                   true_data.loc[range(num_data),"branch length"],
                   color= colors[0], label = labels[0], linewidth=linewidth)
     ax1.fill_between(range(num_data),
-                     arginfer_data.loc[range(num_data), "lower25 branch length"],
-                     arginfer_data.loc[range(num_data),"upper75 branch length"],
-                     color=colors[1], alpha=alpha, label = labels[1])
-    ax1.fill_between(range(num_data),
                      weaver_data.loc[range(num_data),"lower25 branch length"],
                      weaver_data.loc[range(num_data),"upper75 branch length"],
                      color=colors[2], alpha=alpha, label = labels[2])
+    ax1.fill_between(range(num_data),
+                     arginfer_data.loc[range(num_data), "lower25 branch length"],
+                     arginfer_data.loc[range(num_data),"upper75 branch length"],
+                     color=colors[1], alpha=alpha, label = labels[1])
+
     ax1.set_ylabel("branch length 50% CI")
     # ax1.set_xlabel('data sets')
     ax1.set_title("R = 1")
@@ -431,18 +441,28 @@ def plot_interval(true_path = '', argweaver_path=' ', arginfer_path=' ',
     ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
     # ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
     #argweaver
+    #------ lets first sort data ascending
+    true_data.sort_values(by=["ancestral recomb"], ascending=True, inplace=True)
+    new_index= true_data.index.tolist()
+    true_data.reset_index(inplace=True, drop=True)
+    #---- reindex the other two based on this
+    arginfer_data = arginfer_data.reindex(new_index)
+    arginfer_data.reset_index(inplace=True, drop=True)
+    weaver_data = weaver_data.reindex(new_index)
+    weaver_data.reset_index(inplace=True, drop=True)
     ax2 = fig.add_subplot(gs[1, 0])#, sharey=ax1
     ax2.plot(range(num_data),
                   true_data.loc[range(num_data), "ancestral recomb"],
                   color= colors[0],  linewidth=linewidth)
     ax2.fill_between(range(num_data),
-                     arginfer_data.loc[range(num_data),"lower25 ancestral recomb"],
-                     arginfer_data.loc[range(num_data),"upper75 ancestral recomb"],
-                     color=colors[1], alpha=alpha)#lightcoral
-    ax2.fill_between(range(num_data),
                      weaver_data.loc[range(num_data),"lower25 total recomb"],
                      weaver_data.loc[range(num_data),"upper75 total recomb"],
                      color=colors[2], alpha=alpha)
+    ax2.fill_between(range(num_data),
+                     arginfer_data.loc[range(num_data),"lower25 ancestral recomb"],
+                     arginfer_data.loc[range(num_data),"upper75 ancestral recomb"],
+                     color=colors[1], alpha=alpha)#lightcoral
+
     # ax1.legend(labelspacing=0,loc='upper right',frameon=False)
     ax2.set_ylabel("anc recomb 50% CI")
     ax2.set_xlabel('data sets')
@@ -468,7 +488,7 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
     weaverR1_path = argweaver_general_path+"/r1/n10L100K"
     weaverR2_path = argweaver_general_path+"/r2/n10L100K"
     weaverR4_path = argweaver_general_path+"/r4/n10L100K"
-    inferR1_path = arginfer_general_path+ "/n10L100K"
+    inferR1_path = arginfer_general_path+ "/n10L100K_r1"
     inferR2_path = arginfer_general_path+ "/n10L100K_r2"
     inferR4_path = arginfer_general_path+ "/n10L100K_r4"
     def modify_df(infer_df, weaver_df, keep_rows, R =1):
@@ -527,8 +547,8 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
 
 
 if __name__=='__main__':
-    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
-    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K',
+    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
+    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4',
     #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
     # s.multi_scatter(CI=True, argweaver= False, coverage = True)
     # s= Scatter(truth_path = '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
@@ -539,15 +559,15 @@ if __name__=='__main__':
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r2',
     #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'], std=True)
     # s.multi_std()
-    # plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4/true_tmrca7.npy',
-    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r4/out7',
-    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K/out7',
-    #                inferred_filename='tmrca.h5')
+    plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r2/true_tmrca3.npy',
+                   arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r2/out3',
+                    argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out3',
+                   inferred_filename='tmrca.h5')
 
     # plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
     #                 argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
-    #               arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K',
+    #               arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
     #                       columns=["branch length", "ancestral recomb"])
 
-    recrate_boxplot(argweaver_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw',
-                    arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer')
+    # recrate_boxplot(argweaver_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw',
+    #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer')

@@ -578,6 +578,19 @@ class TestARG(unittest.TestCase):
         tot_tmrca= arg.total_tmrca(length)
         # print(tot_tmrca)
 
+    def test_arg_allele_age(self):
+        recombination_rate=1e-8
+        Ne= 5000
+        sample_size = 5
+        length = 6e4
+        ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne,
+                                   length = length, mutation_rate = 1e-8,
+                            recombination_rate = recombination_rate,
+                                   random_seed = 20, record_full_arg = True)
+        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg.ts_to_argnode()
+        arg = tsarg.arg
+        allele_age= arg.allele_age()
 
 class TestMCMC(unittest.TestCase):
 

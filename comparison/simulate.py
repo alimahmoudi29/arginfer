@@ -28,7 +28,7 @@ def get_true_tmrca(tsfull):
     tmrca = np.zeros(int(ts.sequence_length))
     for tree in ts.trees():
         tmrca[int(tree.interval[0]):int(tree.interval[1])]= tree.time(tree.root)
-    return tmrca#wanted_tmrcas
+    return tmrca # wanted_tmrcas
 
 def get_true_features(ts_full, ratio, mut_rate, Ne, true_df):
     '''get  likelihood, prior, posterior,
