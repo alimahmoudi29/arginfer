@@ -547,10 +547,10 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
 
 
 if __name__=='__main__':
-    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
-    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4',
-    #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
-    # s.multi_scatter(CI=True, argweaver= False, coverage = True)
+    s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
+               inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
+               columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
+    s.multi_scatter(CI=True, argweaver= False, coverage = True)
     # s= Scatter(truth_path = '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
     #            columns=["branch length", "ancestral recomb"])
@@ -559,10 +559,10 @@ if __name__=='__main__':
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r2',
     #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'], std=True)
     # s.multi_std()
-    plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r2/true_tmrca3.npy',
-                   arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r2/out3',
-                    argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out3',
-                   inferred_filename='tmrca.h5')
+    # plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r2/true_tmrca3.npy',
+    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r2/out3',
+    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out3',
+    #                inferred_filename='tmrca.h5')
 
     # plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
     #                 argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',

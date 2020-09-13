@@ -9,7 +9,7 @@ a summary of all the individual summaries for each data set:
 
 For ARGinfer: 
 python  file_management.py --replicate 162 \
-    --general_path "/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4" \
+    --general_path "/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1" \
     --read_summary_mf 
     
 #--------------------------------------
@@ -112,7 +112,7 @@ def read_summary_multiple_folder(replicate, general_path,
                         else summary_all.index.max() + 1] =[None for i in range(30)]
     #save true df
     summary_all.to_hdf(general_path + "/summary_all.h5", key = "df")
-    print(summary_all)
+    print(summary_all.head(10))
     print("DONE")
 
 def main(args):

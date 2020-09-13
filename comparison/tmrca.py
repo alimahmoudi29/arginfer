@@ -11,7 +11,7 @@ sys.path.append(f_dir)
 import argbook
 
 '''
-python tmrca.py --general_path '/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4/out5' \
+python tmrca.py --general_path '/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1/out5' \
  --seq_length 1e5 \
  -d   /home/amahmoudi/miniconda3/envs/py27/bin \
  --argweaver_tmrca
@@ -56,7 +56,14 @@ def arginfer_tmrca(general_path, sequence_length):
     print("-------DONE!")
 
 def argweaver_tmrca(general_path, ARGweaver_executable_dir, sequence_length):
-    '''not efficient'''
+    '''
+    ARGweaver: https://github.com/mdrasmus/argweaver/blob/master/bin/arg-extract-tmrca
+
+    Note: since argweaver does not report 50%CI, I have added this to arg-extract-tmrca
+        in /home/amahmoudi/miniconda3/envs/py27/bin to report 25 and 75 quantiles.
+
+    tmrca for a data set: for each site, average over
+    the tmrca given by the ARGs'''
     cmd = os.path.join(ARGweaver_executable_dir, 'arg-extract-tmrca ') +\
         general_path +'/out.%d.smc.gz ' +\
         ' > '+ general_path + '/tmrca.txt'

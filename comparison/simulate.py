@@ -7,7 +7,8 @@ import sys
 import random
 import numpy as np
 
-f_dir = os.path.dirname(os.getcwd())+"/ARGinfer"
+f_dir = os.path.dirname(os.getcwd())#+"/ARGinfer"
+print("f_dir", f_dir)
 sys.path.append(f_dir)
 # print(sys.path)
 import treeSequence
@@ -19,7 +20,7 @@ simulate data sets with different mu/r ratios from msprime
 
 ex: 
 python3 simulate.py --replicate 200 --ratios 0.5  \
- --mu 1e-8 --Ne 5000 -n 5 -L 1e3 --generate --summary --tmrca \
+ --mu 1e-8 --Ne 5000 -n 5 -L 1e3 --generate --summary --tmrca --allele_age \
 --out_path /Users/amahmoudi/Ali/phd/github_projects/mcmc/test1/ts_sim
 '''
 
@@ -29,6 +30,33 @@ def get_true_tmrca(tsfull):
     for tree in ts.trees():
         tmrca[int(tree.interval[0]):int(tree.interval[1])]= tree.time(tree.root)
     return tmrca # wanted_tmrcas
+
+def get_true_allele_age(tsfull):
+    '''return a df with four columns:
+    site: the SNP genomic position
+    recent age: the time of the node the mutation is sitting on
+    mid age: the mid point on the node the mutation occured on
+    latest age: the time of the parent node
+    '''
+    ts = tskit.TreeSequence.simplify(tsfull)
+    nodes= ts.tables.nodes
+    true_allele_age = pd.DataFrame(columns=["site", "recent age", "mid age", "latest age"])
+    for tree in ts.trees():
+        for site in tree.sites():
+            for mutation in site.mutations:
+                child = mutation.node# node on which mutation occurs
+                parent = tree.parent(child)
+                child_time = nodes[child].time
+                parent_time = nodes[parent].time
+                branch_length = tree.branch_length(child)
+                assert branch_length == parent_time-child_time
+                true_allele_age.loc[true_allele_age.shape[0]] = [site.position,
+                                                                 child_time,
+                                                                 (parent_time+child_time)/2,
+                                                                 parent_time]
+                true_allele_age.sort_values(by=['site'], ascending=True, inplace=True)
+                true_allele_age.reset_index(inplace=True, drop=True)
+    return true_allele_age
 
 def get_true_features(ts_full, ratio, mut_rate, Ne, true_df):
     '''get  likelihood, prior, posterior,
@@ -51,7 +79,7 @@ def get_true_features(ts_full, ratio, mut_rate, Ne, true_df):
                     else true_df.index.max() + 1] = [log_lk, log_prior, log_lk+log_prior,
                                                     arg.num_ancestral_recomb,
                                                     arg.num_nonancestral_recomb,
-                                                    arg.num_ancestral_recomb+ arg.num_nonancestral_recomb,
+                                                    arg.num_ancestral_recomb + arg.num_nonancestral_recomb,
                                                     arg.branch_length]
     except:
         true_df.loc[0 if math.isnan(true_df.index.max())\
@@ -131,6 +159,11 @@ def main(args):
             if args.tmrca:# tmrca
                 tmrca = get_true_tmrca(ts_full)
                 np.save(out_path + '/true_tmrca'+str(i)+'.npy', tmrca)
+            if args.allele_age: # allele age
+                true_allele_age = get_true_allele_age(ts_full)
+                true_allele_age.to_hdf(out_path+"/true_allele_age"+str(i)+".h5", key="df")
+                # print("write allele age for, ", i)
+                # print(true_allele_age.head(3))
         #save true df
         true_df.to_hdf(out_path + "/true_summary.h5", key = "df")
 
@@ -145,9 +178,10 @@ if __name__=='__main__':
     parser.add_argument('--ratios', nargs='+',  default= 1, help= 'an array of the mutation/recomb rate ratios')
     parser.add_argument('--length', '-L',type=float, default= 1e4, help=' The sequence length')
     parser.add_argument('--out_path', '-O',type=str, default=os.getcwd(), help='The output path')
-    parser.add_argument( "--generate", help="if we want to simulate new ts", action="store_true")
-    parser.add_argument( "--summary", help="if we want to draw the summary of existing ts", action="store_true")
-    parser.add_argument( "--tmrca", help="if we need tmrca", action="store_true")
+    parser.add_argument("--generate", help="if we want to simulate new ts", action="store_true")
+    parser.add_argument("--summary", help="if we want to draw the summary of existing ts", action="store_true")
+    parser.add_argument("--tmrca", help="if we need tmrca", action="store_true")
+    parser.add_argument("--allele_age", help="if we need allele_age", action="store_true")
     args = parser.parse_args()
     main(args)
 
