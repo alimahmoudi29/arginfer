@@ -10,6 +10,8 @@ import time
 import math
 from scipy import stats
 import seaborn as sns
+from statsmodels.graphics.tsaplots import plot_acf
+import statsmodels as sm
 from tqdm import tqdm
 
 def coverage50_and_average_length_mse(truth ,inferred_mean,
@@ -144,6 +146,7 @@ class Trace(Figure):
 
         self.save(figure_name="argweavertrace" + time.strftime("%Y%m%d-%H%M%S"))
         plt.show()
+
 
 class Scatter(object):
 
@@ -718,21 +721,22 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
     # sns.set_theme(style="dark")
     # sns.set_context("talk")
     #colors: https://hashtagcolor.com
-    flatui = ["#228b22", "#4169e1"]##00ff7f
+    flatui =["#adff2f", "#00ffff"] #["#228b22", "#4169e1"]##00ff7f
+    tl_color = "r"
     sns.set_palette(sns.color_palette(flatui))
     sns.boxplot(x='R', y='recombination rate', hue='model', data=data_df,
-                linewidth=0.75, showfliers=False, width=0.5)
+                linewidth=0.6, showfliers=False, width=0.6)
     plt.axhline(y= np.mean(true_R1["ancestral recomb"]/true_R1["branch length"]),
-                linewidth=0.75, color='r', linestyle = "--", xmin=0, xmax=.5,  label="Truth")#1e-8
+                linewidth=0.75, color=tl_color, linestyle = "--", xmin=0, xmax=.5,  label="Truth")#1e-8
     plt.axhline(y=np.mean(true_R2["ancestral recomb"]/true_R2["branch length"]),
-                linewidth=0.75, color='r', linestyle = "--", xmin=0, xmax=.8)#0.5e-8
+                linewidth=0.75, color=tl_color, linestyle = "--", xmin=0, xmax=.8)#0.5e-8
     plt.axhline(y=np.mean(true_R4["ancestral recomb"]/true_R4["branch length"]),
-                linewidth=0.75, color='r', linestyle = "--", xmin=0, xmax=1)#0.25e-8
-    plt.legend(loc='upper right')
+                linewidth=0.75, color=tl_color, linestyle = "--", xmin=0, xmax=1)#0.25e-8
+    plt.legend(loc='upper right',fancybox=True)
     plt.xlabel(r"$\theta/ \rho$")#, size=10
     plt.ylabel(" Recombination rate")
     figure_name= "recombRateBoxplot"
-    plt.title("recombination rate estimation")
+    plt.title("Recombination rate estimation")
     plt.savefig(inferR1_path+"/{}.pdf".format(figure_name),
                 bbox_inches='tight', dpi=400)
 
@@ -1044,6 +1048,53 @@ def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
                     bbox_inches='tight', dpi=400)
         plt.close()
 
+
+def autocorrelation(arginfer_path='', column=["posterior", "branch length"]):
+    '''great document on this:
+     https://mc-stan.org/docs/2_20/reference-manual/effective-sample-size-section.html
+     '''
+    #------------ effective sample size
+    def neff(arr):
+        n = len(arr)
+        acf = sm.tsa.stattools.acf(arr, nlags = 1, fft = True, adjusted = True)#,
+        sums = 0
+        for k in range(1, len(acf)):
+            sums = sums + (n-k)*acf[k]/n
+        return n/(1+2*sums)
+    infer_data = pd.read_hdf(arginfer_path + '/summary.h5', mode="r")
+    fig, (ax1, ax2) = plt.subplots(1, 2,figsize=(10,3), dpi= 80)
+    print("infer_data[column[0]].tolist()",len(infer_data[column[0]].tolist()))
+    plot_acf(infer_data[column[0]].tolist(), ax=ax2, lags=60, title="",
+             marker=".", color="green", linewidth=.7, adjusted= True)
+    # plot_acf(infer_data[column[1]].tolist(), ax=ax2, lags=50)
+    # plot_pacf(df.traffic.tolist(), ax=ax2, lags=20)
+    ax1.plot(infer_data[column[0]])
+    ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')# (0,0) includes all
+
+    # Decorate
+    # lighten the borders
+    ax1.spines["top"].set_alpha(.3); ax2.spines["top"].set_alpha(.3)
+    ax1.spines["bottom"].set_alpha(.3); ax2.spines["bottom"].set_alpha(.3)
+    ax1.spines["right"].set_alpha(.3); ax2.spines["right"].set_alpha(.3)
+    ax1.spines["left"].set_alpha(.3); ax2.spines["left"].set_alpha(.3)
+    ax2.set_xlabel("Lag"); ax1.set_xlabel("MCMC iteration")
+    ax2.set_ylabel("Autocorrelation"); ax1.set_ylabel("Posterior")
+    # font size of tick labels
+    ax1.tick_params(axis='both', labelsize=10)
+    ax2.tick_params(axis='both', labelsize=10)
+    # anotate ess on acf
+    ess= neff(infer_data[column[0]].tolist())
+    print("ess:", ess)
+    plt.annotate("ESS="+str(int(ess)+1), xy=(40, 0.9), color="red", fontsize=12)
+    figure_name= "autocorrelation"
+    plt.savefig(arginfer_path+"/{}.pdf".format(figure_name),
+                    bbox_inches='tight', dpi=400)
+    plt.close()
+
+
+
+
+
 if __name__=='__main__':
 
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
@@ -1063,10 +1114,10 @@ if __name__=='__main__':
     #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K/out15',
     #                inferred_filename='tmrca.h5', CI= 95, R=1)
 
-    plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
-                    argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
-                  arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
-                          columns=["branch length", "ancestral recomb"], R=1)
+    # plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
+    #                 argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
+    #               arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
+    #                       columns=["branch length", "ancestral recomb"], R=1)
 
     # recrate_boxplot(argweaver_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw',
     #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2')
@@ -1098,3 +1149,5 @@ if __name__=='__main__':
     #            inferred2_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
     #            columns=["branch length"], weaver_infer=True)
     # s.ARGinfer_weaver(R=4, both_infer_methods = True)
+    autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r2/out11',
+                    column=["posterior", "branch length"])
