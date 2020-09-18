@@ -11,7 +11,7 @@ sys.path.append(f_dir)
 import argbook
 
 '''
-python tmrca.py --general_path '/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1/out5' \
+python tmrca.py --general_path '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out10' \
  --seq_length 1e5 \
  -d   /home/amahmoudi/miniconda3/envs/py27/bin \
  --argweaver_tmrca
@@ -20,15 +20,19 @@ python tmrca.py --general_path '/data/projects/punim0594/Ali/phd/mcmc_out/ARGinf
  #---------------
  r4: out5, 7
  r2: out2, 10
+ r1: out2, 5, 15
+ 
 '''
 
 '''
  in bash for multiple data sets: 
  for i in {0..161}; 
- do /home/amahmoudi/miniconda3/envs/py37/bin/python tmrca.py \
- --general_path /data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out$i \
- --seq_length 1e5 -d   /home/amahmoudi/miniconda3/envs/py27/bin --argweaver_tmrca ; done
+ do /home/amahmoudi/miniconda3/envs/py37/bin/python tmrca.py 
+ --general_path /data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K/out$i 
+ --seq_length 1e5 -d   /home/amahmoudi/miniconda3/envs/py27/bin --argweaver_tmrca; done
 '''
+
+
 
 def arginfer_tmrca(general_path, sequence_length):
     '''
@@ -82,12 +86,13 @@ def argweaver_tmrca(general_path, ARGweaver_executable_dir, sequence_length):
     count =0
     while count < len(break_points)-1:
         row= df.iloc[[count], [3, 4,5,6,7]].values.tolist()[0]
-        for j in range(4):
+        for j in range(5):
             tm_np[j][break_points[count]:break_points[count+1]]=row[j]
         count += 1
     tmrca_df["tmrca"]= tm_np[0]; tmrca_df["lower tmrca"]= tm_np[1]
     tmrca_df["upper tmrca"]= tm_np[2]; tmrca_df["lower25 tmrca"]= tm_np[3]
     tmrca_df["upper75 tmrca"]= tm_np[4]
+    assert (tmrca_df["tmrca"].all() <= tmrca_df["upper75 tmrca"].all())
     # for row in range(df.shape[0]):
     #     for ind in range(df.iloc[row, 1], df.iloc[row, 2]):
     #         tmrca_df.loc[ind] = df.iloc[[row], [3, 4,5,6,7]].values.tolist()[0]

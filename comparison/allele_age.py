@@ -103,7 +103,6 @@ def argweaver_allele_age(general_path, ARGweaver_executable_dir):
     print("-------DONE!")
 
 
-
 def main(args):
     if args.arginfer_allele_age:
         arginfer_allele_age(general_path = args.general_path) #sequence_length= args.seq_length

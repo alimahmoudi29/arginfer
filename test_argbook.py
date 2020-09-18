@@ -592,6 +592,22 @@ class TestARG(unittest.TestCase):
         arg = tsarg.arg
         allele_age= arg.allele_age()
 
+    def test_arg_breakpoints(self):
+        recombination_rate=1e-8
+        Ne= 5000
+        sample_size = 5
+        length = 6e4
+        ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne,
+                                   length = length, mutation_rate = 1e-8,
+                            recombination_rate = recombination_rate,
+                                   random_seed = 20, record_full_arg = True)
+        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg.ts_to_argnode()
+        arg = tsarg.arg
+        all_recomb_events = arg.breakpoints()
+        ancestral_recomb_events = arg.breakpoints(only_ancRec= True)
+
+
 class TestMCMC(unittest.TestCase):
 
     def test_detach_update(self):

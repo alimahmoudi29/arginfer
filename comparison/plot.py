@@ -10,6 +10,23 @@ import time
 import math
 from scipy import stats
 import seaborn as sns
+from tqdm import tqdm
+
+def coverage50_and_average_length_mse(truth ,inferred_mean,
+                                      inferred_lower25,inferred_upper75):
+    '''
+    :param truth: an np.array or a pd df column of the true values
+    :param inferred_mean: a pd df or a np array of the mean of the inferred
+    :param inferred_lower25: an np array or a pd df of quantile 0.25
+    :param inferred_upper75: an no array or a pd df of quantile 0.75
+    :return: 50% Coverage probability, 50%average length, mean square error
+    '''
+    coverage50 = sum((inferred_lower25 <=truth)& \
+                   (truth<= inferred_upper75))/len(truth)
+    average_length = np.mean(inferred_upper75 - inferred_lower25)
+    mse=  sum((inferred_mean- truth)**2)/len(truth)
+
+    return coverage50, average_length, mse
 
 class Figure(object):
     """
@@ -130,8 +147,9 @@ class Trace(Figure):
 
 class Scatter(object):
 
-    def __init__(self, truth_path, inferred_path,
-                 columns = ["likelihood","prior", "posterior", "branch length"], std = False):
+    def __init__(self, truth_path, inferred_path, inferred2_path='',
+                 columns = ["likelihood","prior", "posterior", "branch length"],
+                 std = False, weaver_infer=False):
         self.columns = columns
         self.truth_path = truth_path
         self.inferred_path = inferred_path
@@ -143,7 +161,7 @@ class Scatter(object):
         else:
             plot_dimension =[1, 1]
         self.fig = plt.figure(tight_layout=False)
-        print("plot size in inch:",plt.rcParams.get('figure.figsize'))
+        # print("plot size in inch:",plt.rcParams.get('figure.figsize'))
         self.gs = gridspec.GridSpec(int(plot_dimension[0]), int(plot_dimension[1]))
         if not std:
             self.truth_data = pd.read_hdf(self.truth_path +  "/true_summary.h5", mode="r")
@@ -151,14 +169,150 @@ class Scatter(object):
         else: # both inferred, note that instead of truth
             self.inferred_data = pd.read_hdf(self.inferred_path + '/summary_all.h5', mode="r")
             self.inferred2_data = pd.read_hdf(self.truth_path + "/summary_all.h5", mode="r")
+        # ------
+        if weaver_infer:
+            self.inferred2_data = pd.read_hdf(inferred2_path + "/summary_all.h5", mode="r")
+            self.fig = plt.figure(tight_layout=False, figsize=(7,3))
+            print("plot size in inch:",plt.rcParams.get('figure.figsize'))
+            self.gs = gridspec.GridSpec(1, 2)
         #row indexes with not None values
         self.not_None_rows = np.where(self.inferred_data['prior'].notnull())[0]
 
-    def single_scatter(self, column_index, CI = False, argweaver= False, coverage =True):
+
+    def ARGinfer_weaver(self,  R, both_infer_methods=False):
+        '''for branch length and ancestral recombination
+        plot arginfer and argweaver in a (1, 2) plot
+        each of them are compared against the truth
+        NOTE: make sure, argument weaver_infer=True.
+        '''
+        self.gs.update(wspace=0, hspace=0.4)
+        if self.columns[0] =="branch length":
+            weaver_col= "branch length"
+            self.fig.suptitle("Total branch length, "+ r"$\theta/\rho = $"+ str(R), fontsize=9)
+        if self.columns[0] =="ancestral recomb":
+            weaver_col = "total recomb"
+            self.fig.suptitle("Ancestral recombination, "+ r"$\theta/\rho = $"+ str(R), fontsize=9)
+        truth_data = self.truth_data.loc[self.not_None_rows]
+        infer_data= self.inferred_data.loc[self.not_None_rows]
+        weaver_data= self.inferred2_data.loc[self.not_None_rows]
+        line_color= "black"
+        point_color= ["#483d8b","#a52a2a"]
+        ecolor = ["#6495ed","#ff7f50"]##dc143c #8a2be2#00ffff
+        elinewidth = 0.55
+        markersize='4'
+        linewidth= 0.2
+        fontsize=10
+        if not both_infer_methods: # then versus the truth
+            ax1 = self.fig.add_subplot(self.gs[0, 0])
+            ax1.errorbar(truth_data[self.columns[0]],
+                        infer_data[self.columns[0]],
+                        yerr= [infer_data[self.columns[0]] -
+                               infer_data['lower '+self.columns[0]],
+                               infer_data['upper '+self.columns[0]] -
+                               infer_data[self.columns[0]]],
+                               linestyle='', fmt=".",color= point_color[0],
+                               ecolor= ecolor[0], elinewidth=elinewidth,
+                         markersize = markersize, linewidth= linewidth)
+                # ax.set_aspect('equal',adjustable="box")
+            minimum = np.min((ax1.get_xlim(),ax1.get_ylim()))
+            maximum = np.max((ax1.get_xlim(),ax1.get_ylim()))
+            ax1.set_title("ARGinfer", fontsize= fontsize)
+            ax1.set_ylabel("Inferred ",  fontsize= fontsize)
+            ax1.set_xlabel("True "+ self.columns[0],  fontsize= fontsize)
+            # remove values in axis x
+            ax1.set_xticklabels([])
+            # ax1.xaxis.set_visible(False)
+            #scientific number
+            ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+            # ax1.ticklabel_format(style='sci',scilimits=(-2,2),axis='x')
+            ax1.plot([minimum, maximum], [minimum, maximum], ls="--",  color= line_color, label ="Truth")
+            self.gs.update(wspace=0.2, hspace=0.7)
+            ax2 = self.fig.add_subplot(self.gs[0, 1])
+            ax2.errorbar(truth_data[self.columns[0]],
+                        weaver_data[weaver_col],
+                        yerr= [weaver_data[weaver_col] -
+                               weaver_data['lower '+weaver_col],
+                               weaver_data['upper '+weaver_col] -
+                               weaver_data[weaver_col]],
+                               linestyle='', fmt=".",color= point_color[1],
+                                ecolor= ecolor[1], elinewidth=elinewidth,
+                         markersize= markersize, linewidth= linewidth)
+                # ax.set_aspect('equal',adjustable="box")
+            minimum = np.min((ax2.get_xlim(),ax2.get_ylim()))
+            maximum = np.max((ax2.get_xlim(),ax2.get_ylim()))
+            self.fig.subplots_adjust(top=0.78)
+            ax2.set_title("ARGweaver", fontsize= fontsize)
+            ax2.set_ylabel("Inferred ", fontsize= fontsize)
+            ax2.set_xlabel("True "+ self.columns[0], fontsize= fontsize)
+            # remove the axis values
+            ax2.set_yticklabels([])
+            ax2.set_xticklabels([])
+            # ax2.axis("off")
+            # ax2.yaxis.set_visible(False)
+            #scientific number
+            # ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+            # ax2.ticklabel_format(style='sci',scilimits=(-2,2),axis='x')
+            ax2.plot([minimum, maximum], [minimum, maximum], ls="--",  color= line_color, label ="Truth")
+            figure_name= "BothScatter"+self.columns[0]+ str(R)
+        else: # ARGweaver versus ARGinfer
+            line_color= "red"
+            markersize='6'
+            linewidth= 0.1
+            self.fig.suptitle(r"$\theta/\rho = $"+ str(R), fontsize=9)
+            self.gs.update(wspace=0.3, hspace=0.4)
+            ax1 = self.fig.add_subplot(self.gs[0, 0])
+            ax1.errorbar(infer_data["branch length"],
+                        weaver_data["branch length"],
+                               linestyle='', fmt=".",color= point_color[0],
+                         markersize = markersize, linewidth= linewidth)
+                # ax.set_aspect('equal',adjustable="box")
+            minimum = np.min((ax1.get_xlim(),ax1.get_ylim()))
+            maximum = np.max((ax1.get_xlim(),ax1.get_ylim()))
+            ax1.set_title("Total branch length", fontsize= fontsize)
+            ax1.set_ylabel("ARGweaver ",  fontsize= fontsize)
+            ax1.set_xlabel("ARGinfer" ,  fontsize= fontsize)
+            # remove values in axis x
+            # ax1.set_xticklabels([])
+            # ax1.xaxis.set_visible(False)
+            #scientific number
+            ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+            ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+            ax1.plot([minimum, maximum], [minimum, maximum], ls="--",  color= line_color, label ="Truth")
+            self.gs.update(wspace=0.3, hspace=0.7)
+            ax2 = self.fig.add_subplot(self.gs[0, 1])
+            ax2.errorbar(infer_data["ancestral recomb"],
+                        weaver_data["total recomb"],
+                         linestyle='', fmt=".",color= point_color[0],
+                         markersize= markersize, linewidth= linewidth)
+                # ax.set_aspect('equal',adjustable="box")
+            minimum = np.min((ax2.get_xlim(),ax2.get_ylim()))
+            maximum = np.max((ax2.get_xlim(),ax2.get_ylim()))
+            self.fig.subplots_adjust(top=0.88)
+            ax2.set_title("Ancestral recombination", fontsize= fontsize)
+            ax2.set_ylabel("ARGweaver ", fontsize= fontsize)
+            ax2.set_xlabel("ARGinfer", fontsize= fontsize)
+            # remove the axis values
+            # ax2.set_yticklabels([])
+            # ax2.set_xticklabels([])
+            # ax2.axis("off")
+            # ax2.yaxis.set_visible(False)
+            #scientific number
+            ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+            ax2.ticklabel_format(style='sci',scilimits=(-1,1),axis='x')
+            ax2.plot([minimum, maximum], [minimum, maximum], ls="--",  color= line_color, label ="Truth")
+            figure_name= "bothinferenceModels"+ str(R)
+
+        plt.savefig(self.inferred_path+"/{}.pdf".format(figure_name),
+                    bbox_inches='tight', dpi=400)
+        plt.close()
+
+
+    def single_scatter(self, column_index, CI = False,
+                       argweaver= False, coverage =True):
         line_color= "red"
         point_color= "black"
         ecolor = "purple"
-        elinewidth =0.9
+        elinewidth = 0.9
         self.gs.update(wspace=0.3, hspace=0.7) # set the spacing between axes.
         if column_index <2:
             ax = self.fig.add_subplot(self.gs[0, column_index])
@@ -196,27 +350,15 @@ class Scatter(object):
         ax.plot([minimum, maximum], [minimum, maximum], ls="--",  color= line_color)
         if coverage:
             truth = self.truth_data.loc[self.not_None_rows][self.columns[column_index]].tolist()
-            num_data = len(truth)
-            print("total_number of datasets: ", num_data)
-            lower25 = self.inferred_data.loc[self.not_None_rows]['lower25 '+col].tolist()
-            upper75 = self.inferred_data.loc[self.not_None_rows]['upper75 '+col].tolist()
-            assert len(truth) == len(lower25)
-            assert len(upper75) == len(truth)
-            count = 0
-            average_length =[] # average length of 50% intervals
-            for item in range(len(truth)):
-                average_length.append(upper75[item]-lower25[item])
-                if (lower25[item] <= truth[item]) and \
-                        (truth[item] <= upper75[item]):
-                    count +=1
-            if (count/num_data) >= 0.5:
-                pval = min(1, 2*(1- stats.binom(n= num_data, p =0.5).cdf(x=count-1)))
-            else:
-                pval = 2*(stats.binom(n= num_data, p =0.5).cdf(x=count))
-            print("50 percent coverage for ", col," is ", count/num_data, "with pvalue", pval)
-            print("The average length for 50 percent interval is ", np.mean(average_length))
+            coverage50, average_length, mse = coverage50_and_average_length_mse(truth ,
+                                      self.inferred_data.loc[self.not_None_rows][col],
+                                      self.inferred_data.loc[self.not_None_rows]['lower25 '+col],
+                                      self.inferred_data.loc[self.not_None_rows]['upper75 '+col])
+            print("stats for ", col)
+            print("coverage50: ", coverage50, "average_length: ",average_length, "mse: ",mse)
 
-    def multi_scatter(self, CI = False, argweaver = False, coverage=True):
+
+    def multi_scatter(self, CI = False, argweaver = False, coverage=True, R=1):
         '''
         :param CI: if True--> plot 95 percent interval
         :param argweaver: if True, plot the argweaver output otherwise ARGinfer
@@ -228,11 +370,11 @@ class Scatter(object):
             self.single_scatter(column_index=ind, CI= CI,
                                 argweaver= argweaver, coverage = coverage)
         if not argweaver:
-            self.fig.suptitle("ARGinfer")
-            figure_name= "scatter"+"ARGinferr"
+            self.fig.suptitle("ARGinfer, "+ r"$\theta\/rho = $"+ str(R))
+            figure_name= "scatter"+"ARGinferr"+str(R)
         else:
-            self.fig.suptitle("ARGweaver")
-            figure_name= "scatter"+"ARGweaver2"
+            self.fig.suptitle("ARGweaver, "+ r"$\theta\/rho = $"+ str(R))
+            figure_name= "scatter"+"ARGweaver" +str(R)
         if CI:
             figure_name = figure_name+"CI"
         plt.savefig(self.inferred_path+"/{}.pdf".format(figure_name),
@@ -277,61 +419,98 @@ class Scatter(object):
         plt.close()
 
 def plot_tmrca(truth_path ='', argweaver_path='', arginfer_path='',
-               inferred_filename='tmrca.h5'):
+               inferred_filename='tmrca.h5', CI=95, R=1):
     '''a 1*2 plot for tmrca of arginfer and argweaver for same data set'''
     true_tmrca= np.load(truth_path)
     argweaver_tmrca= pd.read_hdf(argweaver_path+"/"+inferred_filename, mode="r")
     arginfer_tmrca= pd.read_hdf(arginfer_path+"/"+inferred_filename, mode="r")
-    fig = plt.figure(tight_layout=False)
+    fig = plt.figure(tight_layout=False, figsize=(7, 2))
+    fig.suptitle(r"$\theta/\rho = $"+ str(R), fontsize=9)
+    fig.subplots_adjust(top=0.8)
     gs = gridspec.GridSpec(1, 2)
     #arginfer
+    linewidth=.9
+    fontsize=8
+    alpha=0.3
+    bbox_to_anchor=(.85, 1.15)
+    # bbox_to_anchor=(.84, 1.22)
+    if CI==50:
+        lcol="lower25 tmrca"
+        ucol="upper75 tmrca"
+        fill_label= "50% CI"
+    else:#95 percent
+        lcol="lower tmrca"
+        ucol="upper tmrca"
+        fill_label= "95% CI"
     ax1 = fig.add_subplot(gs[0, 0])
     ax1.plot(range(true_tmrca.size),
                   true_tmrca,
-                  color= "black", label ="True")
+                  color= "black", label ="True", linewidth=linewidth,
+                    linestyle="dashed")
     ax1.plot(range(arginfer_tmrca.shape[0]),
                   arginfer_tmrca["tmrca"],
-                  color= "red", label ="Inferred")
+                  color= "red", label ="Inferred", linewidth=linewidth)
     ax1.fill_between(range(arginfer_tmrca.shape[0]),
-                    arginfer_tmrca["lower tmrca"],
-                    arginfer_tmrca["upper tmrca"],
-                    color='lightcoral', alpha=.2)
+                    arginfer_tmrca[lcol],
+                    arginfer_tmrca[ucol],
+                    color='lightcoral', alpha=alpha, label = fill_label)
     # ax1.legend(labelspacing=0,loc='upper right',frameon=False)
-    ax1.set_ylabel("TMRCA")
-    ax1.set_xlabel('Genomic Position')
-    ax1.set_title("ARGinfer")
+    ax1.set_ylabel("TMRCA", fontsize=fontsize)
+    ax1.set_xlabel('Genomic Position', fontsize=fontsize)
+    ax1.set_title("ARGinfer", fontsize=fontsize)
+    ax1.tick_params(axis="both", labelsize=7)
     #scientific number
+    # ax1.set_yscale('symlog')
+    # ax1.set_xscale('symlog')
     ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
     ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
     #argweaver
     ax2 = fig.add_subplot(gs[0, 1], sharey=ax1)
     ax2.plot(range(true_tmrca.size),
                   true_tmrca,
-                  color= "black")
+                  color= "black", linewidth=linewidth, linestyle="dashed")
     ax2.plot(range(argweaver_tmrca.shape[0]),
                   argweaver_tmrca["tmrca"],
-                  color= "red")
+                  color= "red", linewidth=linewidth)
     ax2.fill_between(range(argweaver_tmrca.shape[0]),
-                    argweaver_tmrca["lower tmrca"],
-                    argweaver_tmrca["upper tmrca"],
-                    color='lightcoral', alpha=.2)
+                    argweaver_tmrca[lcol],
+                    argweaver_tmrca[ucol],
+                    color='lightcoral', alpha=alpha)
 
     # ax2.legend( labelspacing=0,loc='upper right',frameon=False)
-    ax2.set_title("ARGweaver")
-    ax2.set_xlabel('Genomic Position')
+    ax2.set_title("ARGweaver",fontsize=fontsize)
+    ax2.set_xlabel('Genomic Position',fontsize=fontsize)
     #scientific number
+    # ax2.set_yscale('symlog')
+    # ax2.set_xscale('symlog')
     ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
     ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
-    fig.legend(loc = 'best')#upper right
-    figure_name= "tmrca_combined"
+    # fig.legend(loc = 'best')#upper right
+    fig.legend(loc = 'upper right', bbox_to_anchor=bbox_to_anchor,
+               fancybox=True,fontsize=6)
+    ax2.tick_params(axis="both", labelsize=7)
+    figure_name= "tmrca_combined"+str(CI)
     plt.savefig(arginfer_path+"/{}.pdf".format(figure_name),
                 bbox_inches='tight', dpi=400)
     plt.close()
     from scipy import stats
     pearson_coef1, p_value1 = stats.pearsonr(true_tmrca, arginfer_tmrca["tmrca"])
     pearson_coef2, p_value2 = stats.pearsonr(true_tmrca, argweaver_tmrca["tmrca"])
-    print("arginfer pearson_coef", pearson_coef1, "p_value", p_value1)
-    print("argweaver pearson_coef", pearson_coef2, "p_value", p_value2)
+    infer_coverage50, inferAverage_length, infer_MSE = coverage50_and_average_length_mse(true_tmrca ,
+                                                       arginfer_tmrca["tmrca"],
+                                                        arginfer_tmrca["lower25 tmrca"],
+                                                        arginfer_tmrca["upper75 tmrca"])
+    weaver_coverage50, weaverAverage_length, weaver_MSE = coverage50_and_average_length_mse(true_tmrca,
+                                                       argweaver_tmrca["tmrca"],
+                                                        argweaver_tmrca["lower25 tmrca"],
+                                                        argweaver_tmrca["upper75 tmrca"])
+    print("ARGinfer Statistics:\n")
+    print("Pearson Corr: ", pearson_coef1, "p_value: ", p_value1)
+    print("coverage50: ", infer_coverage50, "Avg_len: ", inferAverage_length, "MSE: ", infer_MSE)
+    print("-"*20)
+    print("ARGweaver Statistics:\n")
+    print("Pearson Corr: ", pearson_coef2, "p_value: ", p_value2)
+    print("coverage50: ", weaver_coverage50, "Avg_len: ", weaverAverage_length, "MSE: ", weaver_MSE)
 
 # def plot_interval1(argweaver_path=' ', arginfer_path=' ',
 #                           columns=["branch length", "ancestral recomb"]):
@@ -389,7 +568,10 @@ def plot_tmrca(truth_path ='', argweaver_path='', arginfer_path='',
 #     plt.close()
 
 def plot_interval(true_path = '', argweaver_path=' ', arginfer_path=' ',
-                          columns=["branch length", "ancestral recomb"]):
+                          columns=["branch length", "ancestral recomb"], R=1):
+    '''plot the 50%CI for all the data sets:
+    all ARGinfer, ARGweaver and truth side by side
+    '''
     true_data = pd.read_hdf(true_path +  "/true_summary.h5", mode="r")
     arginfer_data = pd.read_hdf(arginfer_path + '/summary_all.h5', mode="r")
     weaver_data = pd.read_hdf(argweaver_path + "/summary_all.h5", mode="r")
@@ -402,7 +584,8 @@ def plot_interval(true_path = '', argweaver_path=' ', arginfer_path=' ',
     arginfer_data = modify_df(arginfer_data, not_None_rows)
     weaver_data = modify_df(weaver_data, not_None_rows)
     true_data = modify_df(true_data, not_None_rows)
-    colors =["black", "red","blue"]
+    colors=["#0000ff","#008b8b", "#ff1493"]#
+    # colors =["black", "red","blue"]
     labels = ["True","ARGinfer", "ARGweaver"]
     num_data=150
     linewidth = 0.6
@@ -435,7 +618,7 @@ def plot_interval(true_path = '', argweaver_path=' ', arginfer_path=' ',
 
     ax1.set_ylabel("branch length 50% CI")
     # ax1.set_xlabel('data sets')
-    ax1.set_title("R = 1")
+    ax1.set_title(r"$\theta/\rho = $"+ str(R))
     # plt.title("R = 1")
     #scientific number
     ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
@@ -532,42 +715,386 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
 
     #------combine all together
     data_df= pd.concat((R1_data, R2_data,R4_data))
-    sns.boxplot(x='R', y='recombination rate', hue='model', data=data_df)
+    # sns.set_theme(style="dark")
+    # sns.set_context("talk")
+    #colors: https://hashtagcolor.com
+    flatui = ["#228b22", "#4169e1"]##00ff7f
+    sns.set_palette(sns.color_palette(flatui))
+    sns.boxplot(x='R', y='recombination rate', hue='model', data=data_df,
+                linewidth=0.75, showfliers=False, width=0.5)
     plt.axhline(y= np.mean(true_R1["ancestral recomb"]/true_R1["branch length"]),
-                linewidth=1, color='r', linestyle = "--", xmin=0, xmax=.5)#1e-8
+                linewidth=0.75, color='r', linestyle = "--", xmin=0, xmax=.5,  label="Truth")#1e-8
     plt.axhline(y=np.mean(true_R2["ancestral recomb"]/true_R2["branch length"]),
-                linewidth=1, color='r', linestyle = "--", xmin=0, xmax=.8)#0.5e-8
+                linewidth=0.75, color='r', linestyle = "--", xmin=0, xmax=.8)#0.5e-8
     plt.axhline(y=np.mean(true_R4["ancestral recomb"]/true_R4["branch length"]),
-                linewidth=1, color='r', linestyle = "--", xmin=0, xmax=1)#0.25e-8
+                linewidth=0.75, color='r', linestyle = "--", xmin=0, xmax=1)#0.25e-8
     plt.legend(loc='upper right')
+    plt.xlabel(r"$\theta/ \rho$")#, size=10
+    plt.ylabel(" Recombination rate")
     figure_name= "recombRateBoxplot"
-    plt.title("Box plot of recombination rate")
+    plt.title("recombination rate estimation")
     plt.savefig(inferR1_path+"/{}.pdf".format(figure_name),
                 bbox_inches='tight', dpi=400)
 
+def plot_allele_age(truth_path ='', argweaver_path='', arginfer_path='',
+               inferred_filename='allele_age.h5', R=1, CI= 50):
+    true_alAge= pd.read_hdf(truth_path, mode="r")
+    argweaver_alAge= pd.read_hdf(argweaver_path+"/"+inferred_filename, mode="r")
+    arginfer_alAge= pd.read_hdf(arginfer_path+"/"+inferred_filename, mode="r")
+    #sort ascending
+    true_alAge.sort_values(by=["mid age"], ascending=True, inplace=True)
+    new_index= true_alAge.index.tolist()
+    true_alAge.reset_index(inplace=True, drop=True)
+    #---- reindex the other two based on this
+    arginfer_alAge = arginfer_alAge.reindex(new_index)
+    arginfer_alAge.reset_index(inplace=True, drop=True)
+    argweaver_alAge = argweaver_alAge.reindex(new_index)
+    argweaver_alAge.reset_index(inplace=True, drop=True)
+
+    fig = plt.figure(tight_layout=False, figsize=(7, 2))
+    gs = gridspec.GridSpec(1, 2)
+    #arginfer
+    linewidth=.9
+    fontsize=9
+    if CI==50:
+        infer_lcol="lower25 age"
+        weaver_lcol= infer_lcol
+        infer_ucol="upper75 age"
+        weaver_ucol= infer_ucol
+        bbox_to_anchor=(0.09, .97)
+        fill_label= "50% CI"
+    else:#95 percent
+        infer_lcol="lower025 age"
+        weaver_lcol= "lower age"
+        infer_ucol="upper975 age"
+        weaver_ucol= "upper age"
+        bbox_to_anchor=(0.07, .97)
+        fill_label= "95% CI"
+    # plt.title('Allele age '+ r"$\theta/\rho$ ="+str(R),fontsize=9)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax1.plot(range(true_alAge.shape[0]),
+                  true_alAge["mid age"],
+                  color= "#dc143c", label ="True", linewidth= linewidth, linestyle="dashed")
+    ax1.plot(range(arginfer_alAge.shape[0]),
+                  arginfer_alAge["mid age"],
+                  color= "#0000cd", label ="Inferred", linewidth= linewidth)
+    ax1.fill_between(range(arginfer_alAge.shape[0]),
+                    arginfer_alAge[infer_lcol],#lower025
+                    arginfer_alAge[infer_ucol],#upper975
+                    color='#1e90ff', alpha=.5, label = fill_label )
+    # ax1.legend(labelspacing=0,loc='upper right',frameon=False)
+    ax1.set_ylabel("Allele Age", fontsize=fontsize)
+    ax1.set_xlabel('SNP', fontsize=fontsize)
+    ax1.set_title("ARGinfer",fontsize=fontsize)
+    #scientific number
+    ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+    ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+    #argweaver
+    ax2 = fig.add_subplot(gs[0, 1], sharey=ax1)
+    ax2.plot(range(true_alAge.shape[0]),
+                  true_alAge["mid age"],
+                  color= "#dc143c", linewidth= linewidth, linestyle="dashed")
+    ax2.plot(range(argweaver_alAge.shape[0]),
+                  argweaver_alAge["mid age"],
+                  color= "#0000cd", linewidth=linewidth)
+    ax2.fill_between(range(argweaver_alAge.shape[0]),
+                    argweaver_alAge[weaver_lcol],
+                    argweaver_alAge[weaver_ucol],
+                    color='#1e90ff', alpha=.5)
+
+    # ax2.legend( labelspacing=0,loc='upper right',frameon=False)
+    ax2.set_title("ARGweaver", fontsize=fontsize)
+    ax2.set_xlabel('SNP', fontsize=fontsize)
+    #scientific number
+    ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+    ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+    # fig.legend(loc = 'best')#upper right
+    fig.legend(loc = 'center left', bbox_to_anchor=bbox_to_anchor,
+               fancybox=True,fontsize=6, ncol=3)
+    figure_name= "allele_age_combined"+ str(CI)
+    plt.savefig(arginfer_path+"/{}.pdf".format(figure_name),
+                bbox_inches='tight', dpi=400)
+    plt.close()
+
+    pearson_coef1, p_value1 = stats.pearsonr(true_alAge["mid age"], arginfer_alAge["mid age"])
+    pearson_coef2, p_value2 = stats.pearsonr(true_alAge["mid age"], argweaver_alAge["mid age"])
+    infer_coverage50, inferAverage_length, infer_MSE = coverage50_and_average_length_mse(true_alAge["mid age"] ,
+                                                       arginfer_alAge["mid age"],
+                                                        arginfer_alAge["lower25 age"],
+                                                        arginfer_alAge["upper75 age"])
+    weaver_coverage50, weaverAverage_length, weaver_MSE = coverage50_and_average_length_mse(true_alAge["mid age"],
+                                                       argweaver_alAge["mid age"],
+                                                        argweaver_alAge["lower25 age"],
+                                                        argweaver_alAge["upper75 age"])
+    print("ARGinfer Statistics:\n")
+    print("Pearson Corr: ", pearson_coef1, "p_value: ", p_value1)
+    print("coverage50: ", infer_coverage50, "Avg_len: ", inferAverage_length, "MSE: ", infer_MSE)
+    print("-"*20)
+    print("ARGweaver Statistics:\n")
+    print("Pearson Corr: ", pearson_coef2, "p_value: ", p_value2)
+    print("coverage50: ", weaver_coverage50, "Avg_len: ", weaverAverage_length, "MSE: ", weaver_MSE)
+
+
+
+def get_summary_tmrca_allele_age(truth_general_path ='',
+                                            arginfer_general_path='',
+                                            argweaver_general_path ='',
+                                            replicate=161,
+                                            feature = "tmrca", R=1):
+    '''report the  50% coverage prob, 50% average length, MSE, and Pearson
+     for tmrca or allele age.
+     '''
+    coverage_df= pd.DataFrame(columns=["coverage", "average length",
+                                       "mse", "pearson", "model"])
+    for i in tqdm(range(replicate), ncols=100, ascii=False):
+        if os.path.isfile(arginfer_general_path+"/out" +str(i)+"/"+feature+".h5"):
+            if feature == "tmrca":
+                truth_data= np.load(truth_general_path+"/true_tmrca"+str(i)+".npy")
+                col ="tmrca"
+                prefix=''
+            elif feature =="allele_age":
+                truth_data = pd.read_hdf(truth_general_path+"/true_allele_age"
+                                         +str(i)+".h5", mode="r")["mid age"]
+                col="age"
+                prefix ="mid "
+            else:
+                raise IOError("wrong feature! this is only for tmrca and alele_age")
+            infer_data = pd.read_hdf(arginfer_general_path+"/out" +str(i)+
+                                     "/"+feature+".h5", mode="r")
+            weaver_data = pd.read_hdf(argweaver_general_path+"/out" +str(i)+
+                                      "/"+feature+".h5", mode="r")
+            # ARGinfer
+            pearson_coef1, p_value1 = stats.pearsonr(truth_data, infer_data[prefix+col])
+            infer_cover50, inferAvgLen, infer_MSE = coverage50_and_average_length_mse(truth_data ,
+                                                               infer_data[prefix+col],
+                                                                infer_data["lower25 "+col],
+                                                                infer_data["upper75 "+col])
+            coverage_df.loc[coverage_df.shape[0]] =[infer_cover50, inferAvgLen, infer_MSE,
+                                                    pearson_coef1, "ARGinfer"]
+            #ARGweaver
+            pearson_coef2, p_value2 = stats.pearsonr(truth_data, weaver_data[prefix+col])
+            weaver_cover50, weaverAvgLen, weaver_MSE = coverage50_and_average_length_mse(truth_data,
+                                                               weaver_data[prefix+col],
+                                                                weaver_data["lower25 "+col],
+                                                                weaver_data["upper75 "+col])
+            coverage_df.loc[coverage_df.shape[0]] =[weaver_cover50, weaverAvgLen, weaver_MSE,
+                                                    pearson_coef2, "ARGweaver"]
+        else:
+            pass
+            # coverage_df.loc[coverage_df.shape[0]] =[None for i in range(5)]
+    coverage_df.to_hdf(arginfer_general_path + "/coverage_all"+feature+".h5", key = "df")
+    #-------- do some ploting
+    infer_df = coverage_df[coverage_df["model"]=="ARGinfer"]
+    infer_df.reset_index(inplace=True, drop=True)
+    weaver_df = coverage_df[coverage_df["model"]=="ARGweaver"]
+    weaver_df.reset_index(inplace=True, drop=True)
+    #sort ascending
+    def sort_df(infer_df,weaver_df,  column):
+        '''sort infer_df by columns ascending and then
+         rearrange weaver_df based on that'''
+        infer_df.sort_values(by=[column], ascending=True, inplace=True)
+        new_index= infer_df.index.tolist()
+        infer_df.reset_index(inplace=True, drop=True)
+        #---- reindex the other two based on this
+        weaver_df = weaver_df.reindex(new_index)
+        weaver_df.reset_index(inplace=True, drop=True)
+        return infer_df, weaver_df
+    infer_df, weaver_df =sort_df(infer_df,weaver_df, column="coverage")
+    #------ plot
+
+    # fig = plt.figure(tight_layout=False)
+    # gs = gridspec.GridSpec(1, 2)
+    # #arginfer
+    # ax1 = fig.add_subplot(gs[0, 0])
+    # ax1.plot(range(infer_df.shape[0]),
+    #               infer_df["coverage"],
+    #               color= "red", label ="ARGinfer")
+    # ax1.plot(range(weaver_df.shape[0]),
+    #               weaver_df["coverage"],
+    #               color= "b", label ="ARGweaver")
+    # ax2 = fig.add_subplot(gs[0, 1])
+    # infer_df, weaver_df =sort_df(infer_df,weaver_df, column="average length")
+    # ax2.plot(range(infer_df.shape[0]),
+    #               infer_df["average length"],
+    #               color= "red")
+    # ax2.plot(range(weaver_df.shape[0]),
+    #               weaver_df["average length"],
+    #               color= "b")
+
+    # fig.legend(loc = 'best')#upper right
+
+    # #arginfer
+    # flatui = ["#00ff7f", "#4169e1"]
+    # sns.set_palette(sns.color_palette(flatui))
+    # fig, ax_new = plt.subplots(1,4, sharey=False)
+    # layout = (1,4)
+    #
+    #
+    # bp = coverage_df.boxplot(by="model",ax=ax_new,layout=layout,
+    #                          patch_artist = True,figsize=(4,4),  fontsize=7,grid=False )#,figsize=(6,8), vert = 0
+    # [ax_tmp.set_xlabel('') for ax_tmp in ax_new.reshape(-1)]
+    # [ax_tmp.get_xaxis().set_visible(False) for ax_tmp in ax_new.reshape(-1)]
+
+    # # [ax_tmp.set_xlabel('') for ax_tmp in ax_new.reshape(-1)]
+    # # [ax_tmp.set_ylim(-2, 2) for ax_tmp in ax_new[1]]
+    # fig.suptitle(r'$\theta/\rho$='+str(R))
+
+
+    # coverage_df.boxplot(column=['coverage', 'average length', 'mse', "pearson"], by=['model'])
+    # ax1 = fig.add_subplot(gs[0, 0])
+    # flatui = ["#00ff7f", "#4169e1"]
+    # sns.set_palette(sns.color_palette(flatui))
+    # # sns.boxplot(x="variable", y="value", hue='model', data=pd.melt(coverage_df),linewidth=0.75)
+    # sns.boxplot(x= "model", y='mse', hue='model', data=coverage_df,
+    #             linewidth=0.75)
+    figure_name= "coverageAll"+str(replicate)+feature
+    plt.savefig(arginfer_general_path+"/{}.pdf".format(figure_name),
+                bbox_inches='tight', dpi=400)
+    plt.close()
+
+    #print some stats
+    infer_mean = coverage_df[coverage_df["model"]=="ARGinfer"].mean().tolist()
+    weaver_mean = coverage_df[coverage_df["model"]=="ARGweaver"].mean().tolist()
+    infer_median = coverage_df[coverage_df["model"]=="ARGinfer"].median().tolist()
+    weaver_median = coverage_df[coverage_df["model"]=="ARGweaver"].median().tolist()
+    print("feature is:", feature)
+    print("ARGinfer Statistics:\n")
+    print("Pearson Corr mean: ", infer_mean[3], "median:", infer_median[3])
+    print("coverage50 mean: ", infer_mean[0], "median:",infer_median[0], "\nAvg_len mean: ",
+          infer_mean[1],infer_median[1], "\nMSE mean: ", infer_mean[2], "median:", infer_median[2])
+    print("-"*20)
+    print("ARGweaver Statistics:\n")
+    print("Pearson Corr mean: ", weaver_mean[3], "median", weaver_median[3])
+    print("coverage50 mean: ", weaver_mean[0], "median", weaver_median[0],
+          "\nAvg_len mean: ", weaver_mean[1], "median",weaver_median[1],
+          "\nMSE: ", weaver_mean[2], "median:", weaver_median[2])
+
+    # now we can plot it
+
+def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
+                         column = ["branch length"], sub_sample =50):
+        '''
+        only one scatter plot for  a sub set (sub_sample) of data sets to
+        plot both argweaver and arginfer side by side
+        This is for the completion seminar
+        '''
+        truth_data = pd.read_hdf(truth_path +  "/true_summary.h5", mode="r")
+        infer_data = pd.read_hdf(arginfer_path + '/summary_all.h5', mode="r")
+        weaver_data = pd.read_hdf(argweaver_path + '/summary_all.h5', mode="r")
+        fig = plt.figure(tight_layout=False, figsize=(8, 3))
+        print("plot size in inch:",plt.rcParams.get('figure.figsize'))
+        gs = gridspec.GridSpec(1, 1)
+        not_None_rows = np.where(infer_data['prior'].notnull())[0]
+
+        #sub sample:
+        truth_data = truth_data.loc[not_None_rows][0:sub_sample]
+        infer_data= infer_data.loc[not_None_rows][0:sub_sample]
+        weaver_data= weaver_data.loc[not_None_rows][0:sub_sample]
+        if column[0] =="branch length":
+            weaver_col= "branch length"
+            epsilon= 50000000
+        if column[0] =="ancestral recomb":
+            weaver_col = "total recomb"
+            epsilon = 0.3
+
+        # line_color= "black"
+        # point_color= ["#483d8b","#a52a2a"]
+        # ecolor = ["#6495ed","#ff7f50"]##dc143c #8a2be2#00ffff
+        line_color= "black"
+        point_color= ["blue", "orange"]#orange
+        ecolor = ["blue", "darkorange"]
+        markersize='4'
+        elinewidth = 0.72
+        gs.update(wspace=0.3, hspace=0.7) # set the spacing between axes.
+        ax = fig.add_subplot(gs[0, 0])
+        ax.errorbar(truth_data[column[0]],
+                    infer_data[column[0]],
+                    yerr= [infer_data[column[0]] -
+                           infer_data['lower25 '+column[0]],
+                           infer_data['upper75 '+column[0]] -
+                           infer_data[column[0]]],
+                           linestyle='', fmt=".",color= point_color[0],
+                           ecolor= ecolor[0], elinewidth=elinewidth,
+                            label ="ARGinfer", marker = ".", markersize= markersize)
+        ax.errorbar(truth_data[column[0]]+epsilon,
+                    weaver_data[weaver_col],
+                    yerr= [weaver_data[weaver_col] -
+                           weaver_data['lower25 '+weaver_col],
+                           weaver_data['upper75 '+weaver_col] -
+                           weaver_data[weaver_col]],
+                           linestyle='', fmt=".",color= point_color[1],
+                            ecolor= ecolor[1], elinewidth=elinewidth,
+                            label="ARGweaver",marker = "^", markersize= "2")
+            # ax.set_aspect('equal',adjustable="box")
+        minimum = np.min((ax.get_xlim(),ax.get_ylim()))
+        maximum = np.max((ax.get_xlim(),ax.get_ylim()))
+        ax.set_ylabel("Inferred ")
+        ax.set_xlabel("True "+ column[0])
+        #scientific number
+        ax.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
+        ax.ticklabel_format(style='sci',scilimits=(-2,2),axis='x')
+        # ax.set_yscale('log')
+        # ax.set_xscale('log')
+        # ax.axis('equal')
+        # ax.axis('square')
+        ax.plot([minimum, maximum], [minimum, maximum], ls="--",  color= line_color, label ="Truth")
+        fig.legend(loc = 'upper left', bbox_to_anchor=(0.10, .95),fancybox=True)#upper right
+        figure_name= "subsampleScatter"+column[0]
+        plt.savefig(arginfer_path+"/{}.pdf".format(figure_name),
+                    bbox_inches='tight', dpi=400)
+        plt.close()
 
 if __name__=='__main__':
-    s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
-               inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
-               columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
-    s.multi_scatter(CI=True, argweaver= False, coverage = True)
+
+    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
+    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4',
+    #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
+    # s.multi_scatter(CI=True, argweaver= False, coverage = True, R=4)
     # s= Scatter(truth_path = '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
     #            columns=["branch length", "ancestral recomb"])
-    # s.multi_scatter(CI=True, argweaver= True, coverage = True)
+    # s.multi_scatter(CI=True, argweaver= True, coverage = True, R=4)
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r2',
     #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'], std=True)
     # s.multi_std()
-    # plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r2/true_tmrca3.npy',
-    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r2/out3',
-    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out3',
-    #                inferred_filename='tmrca.h5')
+    # plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1/true_tmrca15.npy',
+    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1/out15',
+    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K/out15',
+    #                inferred_filename='tmrca.h5', CI= 95, R=1)
 
-    # plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
-    #                 argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
-    #               arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
-    #                       columns=["branch length", "ancestral recomb"])
+    plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
+                    argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
+                  arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
+                          columns=["branch length", "ancestral recomb"], R=1)
 
     # recrate_boxplot(argweaver_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw',
-    #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer')
+    #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2')
+
+    # plot_allele_age(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4/true_allele_age7.h5',
+    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4/out7',
+    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K/out7',
+    #                inferred_filename='allele_age.h5', R=4, CI=50)
+
+    # get_summary_tmrca_allele_age(truth_general_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
+    #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
+    #                 argweaver_general_path ='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
+    #                 replicate=161,
+    #                 feature = "allele_age", R=4)
+    #
+    # compare_infer_weaver(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
+    #                      argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
+    #                      arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4',
+    #                      column = ["ancestral recomb"], sub_sample =50)
+
+    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
+    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
+    #            inferred2_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
+    #            columns=["ancestral recomb"], weaver_infer=True)
+    # s.ARGinfer_weaver(R=1)
+
+    # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
+    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4',
+    #            inferred2_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
+    #            columns=["branch length"], weaver_infer=True)
+    # s.ARGinfer_weaver(R=4, both_infer_methods = True)

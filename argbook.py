@@ -2,6 +2,7 @@
 import collections
 import math
 from sortedcontainers import SortedSet
+from sortedcontainers import SortedList
 import bintrees
 import pickle
 import numpy as np
@@ -751,7 +752,7 @@ class ARG(object):
 
     def total_tmrca(self, sequence_length):
         '''return the tmrca of all the sites in the ARG'''
-        break_points = self.breakpoints
+        break_points = self.breakpoints(only_ancRec= True, set= True)
         break_points.add(0)
         break_points.add(sequence_length)
         tot_tmrca = np.zeros(int(sequence_length))
@@ -788,12 +789,28 @@ class ARG(object):
         age_df.reset_index(inplace=True, drop=True)
         return age_df
 
-    @property
-    def breakpoints(self):
-        br = SortedSet()
-        for node in self.nodes.values():
-            if node.breakpoint != None:
-                br.add(node.breakpoint)
+    #@property
+    def breakpoints(self, only_ancRec= False, set= True):
+        '''
+
+        :param only_ancRec: only ancestral rec with repetition
+        :param set: if set, only uqique posittions are returned
+        :return: either a list/set of all recombs
+            or a list of anc rec that has repetition
+        '''
+        if set:
+            br = SortedSet()
+        else:
+            br = SortedList()
+        if not only_ancRec:
+            for node in self.nodes.values():
+                if node.breakpoint != None:
+                    br.add(node.breakpoint)
+        else:
+            for node in self.nodes.values():
+                if node.breakpoint != None and\
+                        node.contains(node.breakpoint):#ancestral
+                    br.add(node.breakpoint)
         return br
 
     #========== probabilites
