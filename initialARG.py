@@ -57,10 +57,13 @@ class Initial(object):
         self.next_event = True
 
     def generate_time(self):
+        c=1
         self.number_of_lineages = len(self.P)
+        print("self.number_of_lineages", self.number_of_lineages)
         coal_rate = (self.number_of_lineages * (self.number_of_lineages - 1)
                     / (4*self.Ne))
-        rec_rate = (self.number_of_links * (self.r))
+        rec_rate = (self.number_of_links/c * (self.r))
+        print("self.-------------------number_of_links", self.number_of_links)
         tot_rate = coal_rate + rec_rate
         if self.next_event:
             self.t += random.expovariate(tot_rate)
@@ -214,7 +217,6 @@ class Initial(object):
         ''''''
         u1_index = random.sample(self.P.keys(), 1)[0]
         u1_head = self.P.pop(u1_index)
-        assert u1_head.prev is None
         u1_tail = u1_head.node.get_tail()
         # now find another seq in P that u1 can join to--> is compatible
         #TODO: parallele
@@ -235,18 +237,23 @@ class Initial(object):
             all_consistents = sorted(all_consistents, key=itemgetter(2), reverse=True)
             # u1_index and u2_head can merge
             chosen = all_consistents[0]
-            u2_index = chosen[0]; new_muts = chosen[1]
-            u2_head = self.P.pop(u2_index)
-            node = self.commom_ancestor_event(u1_head, u2_head)
-            node.snps = new_muts
-            #remove the mutated one from SNPs
-            self.remaining_SNPs = self.remaining_SNPs.difference(new_muts)
-            #---------
-            self.number_of_links -= self.arg.__getitem__(u1_index).num_links()
-            self.number_of_links -= self.arg.__getitem__(u2_index).num_links()
-            if node.first_segment != None:
-                self.number_of_links += node.num_links()
-            self.next_event = True
+            #----- added this if: 28 Sep 2020--> only overlapping can coal
+            if chosen[2]>0:
+                u2_index = chosen[0]; new_muts = chosen[1]
+                u2_head = self.P.pop(u2_index)
+                node = self.commom_ancestor_event(u1_head, u2_head)
+                node.snps = new_muts
+                #remove the mutated one from SNPs
+                self.remaining_SNPs = self.remaining_SNPs.difference(new_muts)
+                #---------
+                self.number_of_links -= self.arg.__getitem__(u1_index).num_links()
+                self.number_of_links -= self.arg.__getitem__(u2_index).num_links()
+                if node.first_segment != None:
+                    self.number_of_links += node.num_links()
+                self.next_event = True
+            else:
+                self.P[u1_index] = u1_head
+                self.next_event = False
         else:
             #there is no node consistent with u1, then no coal
             # put u1 back to P
@@ -331,11 +338,14 @@ class Initial(object):
             self.next_event = False
 
     def build(self):
+        count =0
         while self.P:
             event_type = self.generate_time()
             if event_type == "coal":
                 self.merge_event()
             else:
+                count+=1
+                print("recombination number", count)
                 self.recombination_event()
         assert self.remaining_SNPs.is_empty
         assert self.number_of_links == 0

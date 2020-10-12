@@ -1,5 +1,6 @@
 from plot import *
 from tqdm import tqdm
+
 '''
 after ARGinfer, or ARGweaver done for multiple data sets!
  this is used to summarise the info of 
@@ -8,8 +9,8 @@ this file is
 a summary of all the individual summaries for each data set:
 
 For ARGinfer: 
-python  file_management.py --replicate 162 \
-    --general_path "/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1" \
+/home/amahmoudi/miniconda3/envs/py37/bin/python  file_management.py --replicate 162 \
+    --general_path /data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r1 \
     --read_summary_mf 
     
 #--------------------------------------
@@ -43,7 +44,7 @@ def read_summary_multiple_folder(replicate, general_path,
                                             'upper branch length','std branch length',
                                             "lower25 branch length", "upper75 branch length",
                                             'lower total recomb','total recomb','upper total recomb',
-                                            'std total recomb',"lower25 total recomb", "upper75 total recomb" ))
+                                            'std total recomb',"lower25 total recomb", "upper75 total recomb"))
         for i in tqdm(range(replicate), ncols=100, ascii=False):
         # for i in range(replicate):
             out_path = general_path+"/out" +str(i)
@@ -93,8 +94,8 @@ def read_summary_multiple_folder(replicate, general_path,
                 f= Figure(out_path, argweaver = argweaver)
                 stats_df = f.data
                 del stats_df['noncompats']
-                burn_in=10000
-                sample_step= 20
+                burn_in=2000
+                sample_step= 10
                 # keep every sample_stepth after burn_in
                 stats_df = stats_df.iloc[burn_in::sample_step, :]
                 df_mean = stats_df.mean(axis = 0).values.tolist()

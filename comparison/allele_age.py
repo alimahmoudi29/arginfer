@@ -25,7 +25,7 @@ import sys
 from sortedcontainers import SortedSet
 import numpy as np
 import subprocess
-f_dir = os.path.dirname(os.getcwd())#+"/ARGinfer"
+f_dir = os.path.dirname(os.getcwd())+"/ARGinfer"
 sys.path.append(f_dir)
 # print(sys.path)
 import argbook

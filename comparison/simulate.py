@@ -24,6 +24,10 @@ python3 simulate.py --replicate 200 --ratios 0.5  \
 --out_path /Users/amahmoudi/Ali/phd/github_projects/mcmc/test1/ts_sim
 '''
 
+def get_num_snps(tsfull):
+    '''number of snps'''
+    return tsfull.num_sites
+
 def get_true_tmrca(tsfull):
     ts = tskit.TreeSequence.simplify(tsfull)
     tmrca = np.zeros(int(ts.sequence_length))
@@ -66,6 +70,7 @@ def get_true_features(ts_full, ratio, mut_rate, Ne, true_df):
     '''
     try:
         recomb_rate = float(mut_rate/ratio)
+        ts_num_snps=  get_num_snps(ts_full)
         tsarg = treeSequence.TreeSeq(ts_full)
 
         tsarg.ts_to_argnode()
@@ -80,10 +85,10 @@ def get_true_features(ts_full, ratio, mut_rate, Ne, true_df):
                                                     arg.num_ancestral_recomb,
                                                     arg.num_nonancestral_recomb,
                                                     arg.num_ancestral_recomb + arg.num_nonancestral_recomb,
-                                                    arg.branch_length]
+                                                    arg.branch_length, ts_num_snps]
     except:
         true_df.loc[0 if math.isnan(true_df.index.max())\
-                else true_df.index.max() + 1] = [None for i in range(7)]
+                else true_df.index.max() + 1] = [None for i in range(8)]
     return true_df
 
 def simulate_ts(replicate, ratio, mut_rate, Ne, sample_size,
@@ -143,13 +148,14 @@ def main(args):
     if args.summary:
         true_df = pd.DataFrame(columns=('likelihood', 'prior', "posterior",
                                              'ancestral recomb', 'non ancestral recomb',
-                                                'total recomb', 'branch length'))
+                                                'total recomb', 'branch length', "num_snps"))
         if not args.generate:
             ratio = list(args.ratios)[0]
             ratio = float(ratio)
             if ratio == int(ratio):
                 ratio = int(ratio)
         out_path = args.out_path+"/sim_r"+str(ratio)
+        num_snps =[]
         for i in tqdm(range(args.replicate), ncols=100, ascii=False):
         # for i in range(args.replicate):
             name = "n"+str(args.sample_size)+"Ne"+str(int(args.Ne/1000))+"K_L"+ \
@@ -166,7 +172,18 @@ def main(args):
                 # print(true_allele_age.head(3))
         #save true df
         true_df.to_hdf(out_path + "/true_summary.h5", key = "df")
-
+    # if args.num_snps:
+    #     ratio = int(args.ratios[0])
+    #     out_path = args.out_path+"/sim_r"+str(ratio)
+    #     num_snps =[]
+    #     for i in tqdm(range(args.replicate), ncols=100, ascii=False):
+    #         name = "n"+str(args.sample_size)+"Ne"+str(int(args.Ne/1000))+"K_L"+ \
+    #                str(int(args.length/1000))+"K"+ "_iter"+ str(i)
+    #         ts_full = msprime.load(out_path +"/"+name+".args")
+    #         num_snps.append(get_num_snps(ts_full))
+    #     true_df= pd.read_hdf(out_path + "/true_summary.h5", mode="r")
+    #     true_df["num_snps"] = num_snps
+    #     true_df.to_hdf(out_path + "/true_summary.h5", key = "df")
 if __name__=='__main__':
     import argparse
     import os
@@ -182,6 +199,7 @@ if __name__=='__main__':
     parser.add_argument("--summary", help="if we want to draw the summary of existing ts", action="store_true")
     parser.add_argument("--tmrca", help="if we need tmrca", action="store_true")
     parser.add_argument("--allele_age", help="if we need allele_age", action="store_true")
+    # parser.add_argument("--num_snps", help="store number of snps", action="store_true")
     args = parser.parse_args()
     main(args)
 

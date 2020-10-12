@@ -5,13 +5,14 @@ import sys
 from sortedcontainers import SortedSet
 import numpy as np
 import subprocess
-f_dir = os.path.dirname(os.getcwd())#+"/ARGinfer"
+f_dir = os.path.dirname(os.getcwd())+"/ARGinfer"
+print("f_dir", f_dir)
 sys.path.append(f_dir)
 # print(sys.path)
 import argbook
 
 '''
-python tmrca.py --general_path '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out10' \
+python tmrca.py --general_path /data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out10 \
  --seq_length 1e5 \
  -d   /home/amahmoudi/miniconda3/envs/py27/bin \
  --argweaver_tmrca

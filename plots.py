@@ -31,12 +31,13 @@ class Figure(object):
 
 class plot_summary(Figure):
     name = "summary"
-    def plot(self,  true_values= True):
+    def plot(self,  true_values= False):
         df = self.data
-        truth =  self.load_true_values()
-        true_anc_recomb= truth[3]
-        true_nonanc_rec = truth [4]
-        true_branch_length = truth[5]
+        if true_values:
+            truth =  self.load_true_values()
+            true_anc_recomb= truth[3]
+            true_nonanc_rec = truth [4]
+            true_branch_length = truth[5]
         fig = plt.figure()
         fig.subplots_adjust(hspace = 0.35, wspace = 0.6)
         for i,  d in zip(range(9), ["likelihood", "prior", "posterior","branch length",

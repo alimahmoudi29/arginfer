@@ -127,9 +127,33 @@ class MCMC(object):
 
     def __init__(self, ts_full = None, sample_size = 5, Ne =5000, seq_length= 3e5, mutation_rate=1e-8,
                  recombination_rate=1e-8,
-                 data = {}, outpath = os.getcwd()+"/output", verbose=False):
+                 input_data_path = '',
+                 haplotype_data_name = '',
+                 ancAllele_data_name='',
+                 snpPos_data_name='',
+                 outpath = os.getcwd()+"/output", verbose=False):
+        '''
+        :param ts_full: TS with full_record=True, if given, simulation data else: real data in
+        :param sample_size:
+        :param Ne:
+        :param seq_length:
+        :param mutation_rate:
+        :param recombination_rate:
+        :param input_data_path: the imput path to the data
+        :param haplotype_data_name: a \t separater '' delimiter txt file
+            :[T G C T...
+              C G T A], nrow= num seqs, ncol= num od SNPs
+        :param ancAllele_data_name: a '' delimiter txt file of ancestral allele for each site [G, T, A,...] (1*m)
+        :param snpPos_data_name: a '' delimiter txt file of SNP positions on chromosome [1, 2000, ...] (1*m)
+        :param outpath:
+        :param verbose:
+        '''
         self.ts_full = ts_full
-        self.data = data #a dict, key: snp_position- values: seqs with derived allele
+        self.data = {} #a dict, key: snp_position- values: seqs with derived allele
+        self.input_data_path = input_data_path
+        self.haplotype_data_name = haplotype_data_name
+        self.ancAllele_data_name = ancAllele_data_name
+        self.snpPos_data_name = snpPos_data_name
         self.arg = ARG()
         self.mu = mutation_rate #mu
         self.r = recombination_rate
@@ -178,28 +202,60 @@ class MCMC(object):
         self.default_recombination_rate = recombination_rate
         self.default_Ne = Ne
 
+    def read_convert_data(self):
+        '''
+        convert the imput data for the required data
+        :param: general_path to the data
+        :param haplotype_name: the haplotype name, important, this file should be a \t sep txt file
+            with no header and n*m of the nuceotides
+        :param ancestral_allele_name: the ancestral name. the file in this
+            path should be a txt file with '' delimiter
+        :param snp_pos_name: ANP chromosome posiitions. a txt file 1*m,  '' delimiter.
+        '''
+        haplotype_df = pd.read_csv(self.input_data_path + '/'+
+                                   self.haplotype_data_name, sep="\t",header=None)
+        if self.verbose:
+            print("######succesfuly read haplotype file ")
+        haplotype_df.columns=list(range(haplotype_df.shape[1]))
+        ancestral_allele_np= np.loadtxt(self.input_data_path+'/'+
+                                        self.ancAllele_data_name, dtype='str')
+        if self.verbose:
+            print("######succesfuly read ancestral_allele file")
+        snp_pos_np= np.loadtxt(self.input_data_path+'/'+self.snpPos_data_name)
+        if self.verbose:
+            print("######succesfuly read SNP positions file ")
+        new_data = {}
+        for ind  in range(haplotype_df.shape[1]):
+            derived_df= haplotype_df[ind]!= ancestral_allele_np[ind]
+            seq_carry_derived = derived_df.index[derived_df].tolist()
+            position = int(math.ceil(snp_pos_np[ind]))
+            b = bintrees.AVLTree()
+            b.update({k: k for k in seq_carry_derived})
+            new_data[position] = b
+        for key in new_data.keys():
+            assert 0<len(new_data[key])<self.n
+        self.data = new_data
+
     def get_initial_arg(self):
         '''
         TODO: build an ARG for the given data.
         '''
         if self.ts_full == None:
-            ts_full = msprime.simulate(sample_size = self.n, Ne = self.Ne,
-                                   length = self.seq_length, mutation_rate = self.mu,
-                                   recombination_rate = self.r,
-                                   record_full_arg = True)
+            #real data
+            self.read_convert_data()
         else:
             ts_full= self.ts_full
-        tsarg = treeSequence.TreeSeq(ts_full)
-        tsarg.ts_to_argnode()
-        self.data = treeSequence.get_arg_genotype(ts_full)
-        #----- true values
-        self.arg = tsarg.arg
-        if  self.verbose:
-            print("true number of rec", len(self.arg.rec)/2)
-        self.log_lk = self.arg.log_likelihood(self.mu, self.data)
-        self.log_prior = self.arg.log_prior(self.n, self.seq_length,
-                                            self.r, self.Ne, False)
-        np.save(self.outpath+"/true_values.npy", [self.log_lk, self.log_prior,
+            tsarg = treeSequence.TreeSeq(ts_full)
+            tsarg.ts_to_argnode()
+            self.data = treeSequence.get_arg_genotype(ts_full)
+            #----- true values
+            self.arg = tsarg.arg
+            if  self.verbose:
+                print("true number of rec", len(self.arg.rec)/2)
+            self.log_lk = self.arg.log_likelihood(self.mu, self.data)
+            self.log_prior = self.arg.log_prior(self.n, self.seq_length,
+                                                self.r, self.Ne, False)
+            np.save(self.outpath+"/true_values.npy", [self.log_lk, self.log_prior,
                                                   self.log_lk + self.log_prior,
                                                  self.arg.branch_length,
                                                   self.arg.num_ancestral_recomb,
@@ -210,7 +266,7 @@ class MCMC(object):
                      self.Ne, self.mu, self.r)
         init.build()
         self.arg = init.arg
-        if  self.verbose:
+        if self.verbose:
             print("initial num rec:", len(self.arg.rec)/2)
         self.m = len(self.data)
         self.log_lk = self.arg.log_likelihood(self.mu, self.data)

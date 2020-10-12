@@ -227,7 +227,7 @@ class TreeSeq(object):
             self.arg.roots[node.index] = node.index
 
     def map_mutation(self):
-        '''returns a list of mutation positions where where the index
+        '''returns a list of mutation positions  where the index
         is the node on which the mutation took place
         '''
         mutation_map = [[] for _ in range(self.ts_full.num_nodes)]

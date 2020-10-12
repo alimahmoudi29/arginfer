@@ -136,7 +136,6 @@ def main(args):
         assert os.stat(aw_in.name).st_size > 0, "Initial .sites file is empty"
         logging.debug("running '{}'".format(" ".join(cmd)))
         subprocess.call(cmd)
-        #now check that the smc file produced can be converted to nodes
         smc = args.full_prefix + "." + str(args.iterations) + ".smc.gz"
         # assert os.path.isfile(smc),  "No output file names {}".format(smc)
     end_time = time.time()
