@@ -1,19 +1,28 @@
-''' This module is responsible for the mcmc'''
-import msprime
+''' This module is responsible for the mcmc:
+branch1: if the new rejected, we revert the
+current ARG by backtracking all the changes
+This module: copy the current ARG'''
+
 import treeSequence
-import random
+
 import pandas as pd
 import numpy as np
-import collections
-import time
+
 import copy
 from tqdm import tqdm
 import sys
 import os
 import shutil
-sys.setrecursionlimit(40000)
+
+
+# for recursion issue
+# print("current recursion limit is ", sys.getrecursionlimit())
+sys.setrecursionlimit(500000)
+
+import gc
 
 from argbook import *
+from initialARG import *
 
 class TransProb(object):
     '''transition probability calculation'''
@@ -45,23 +54,19 @@ class TransProb(object):
         '''
         if forward:
             if reattach_root: #expo
-                print("forward expo:", new_time- lower_bound)
                 self.log_prob_forward += math.log(lambd) - \
                                          (lambd * (new_time- lower_bound))
             else: #uniform
-                print("forward truncated:", new_time -lower_bound)
-                # self.log_prob_forward += math.log(1/(upper_bound -lower_bound))
-                self.log_prob_forward +=  math.log(lambd) - (lambd * (new_time - lower_bound))-\
-                           math.log(1- math.exp(- lambd *(upper_bound-lower_bound)))
+                self.log_prob_forward += math.log(1/(upper_bound -lower_bound))
+                # self.log_prob_forward +=  math.log(lambd) - (lambd * (new_time - lower_bound))-\
+                #            math.log(1- math.exp(- lambd *(upper_bound-lower_bound)))
         else:
             if reattach_root:
-                print("reverse expo:", new_time- lower_bound)
                 self.log_prob_reverse += math.log(lambd)- (lambd * (new_time- lower_bound))
             else:
-                print("reverse truncated:", new_time -lower_bound)
-                # self.log_prob_reverse += math.log(1/(upper_bound -lower_bound))
-                self.log_prob_reverse += math.log(lambd) - (lambd * (new_time - lower_bound))-\
-                           math.log(1- math.exp(- lambd *(upper_bound-lower_bound)))
+                self.log_prob_reverse += math.log(1/(upper_bound -lower_bound))
+                # self.log_prob_reverse += math.log(lambd) - (lambd * (new_time - lower_bound))-\
+                #            math.log(1- math.exp(- lambd *(upper_bound-lower_bound)))
 
     def spr_recomb_simulate(self, l_break, r_break, forward = True):
         '''simulate the recomb breakpoint if a window is given
@@ -111,20 +116,44 @@ class TransProb(object):
         else:
             self.log_prob_reverse += math.log(1/2)
 
-    def kuhner_num_nodes(self, num_nodes,forward =  True):
+    def kuhner_num_nodes(self, num_nodes, forward =  True):
         '''resiprocal of the number of nodes in the ARG excluding the roots'''
         if forward:
             self.log_prob_forward = math.log(1/num_nodes)
         else:
             self.log_prob_reverse = math.log(1/num_nodes)
 
-
 class MCMC(object):
 
-    def __init__(self, sample_size = 5, Ne =5000, seq_length= 1e5, mutation_rate=1e-8,
+    def __init__(self, ts_full = None, sample_size = 5, Ne =5000, seq_length= 3e5, mutation_rate=1e-8,
                  recombination_rate=1e-8,
-                 data = {}, outpath = os.getcwd()+"/output", out_id = "out"):
-        self.data = data #a dict, key: snp_position- values: seqs with derived allele
+                 input_data_path = '',
+                 haplotype_data_name = '',
+                 ancAllele_data_name='',
+                 snpPos_data_name='',
+                 outpath = os.getcwd()+"/output", verbose=False):
+        '''
+        :param ts_full: TS with full_record=True, if given, simulation data else: real data in
+        :param sample_size:
+        :param Ne:
+        :param seq_length:
+        :param mutation_rate:
+        :param recombination_rate:
+        :param input_data_path: the imput path to the data
+        :param haplotype_data_name: a \t separater '' delimiter txt file
+            :[T G C T...
+              C G T A], nrow= num seqs, ncol= num od SNPs
+        :param ancAllele_data_name: a '' delimiter txt file of ancestral allele for each site [G, T, A,...] (1*m)
+        :param snpPos_data_name: a '' delimiter txt file of SNP positions on chromosome [1, 2000, ...] (1*m)
+        :param outpath:
+        :param verbose:
+        '''
+        self.ts_full = ts_full
+        self.data = {} #a dict, key: snp_position- values: seqs with derived allele
+        self.input_data_path = input_data_path
+        self.haplotype_data_name = haplotype_data_name
+        self.ancAllele_data_name = ancAllele_data_name
+        self.snpPos_data_name = snpPos_data_name
         self.arg = ARG()
         self.mu = mutation_rate #mu
         self.r = recombination_rate
@@ -135,17 +164,17 @@ class MCMC(object):
         self.log_lk = 0
         self.log_prior = 0
         self.outpath = outpath
+        self.verbose = verbose
         if not os.path.exists(self.outpath):
             os.makedirs(self.outpath)
         else:# if exists, first delete it and then create the directory
             shutil.rmtree(self.outpath)
             os.mkdir(self.outpath)
-        self.out_id = out_id
         self.transition_prob = TransProb()
         self.floatings = bintrees.AVLTree()#key: time, value: node index, d in the document
         self.floatings_to_ckeck = bintrees.AVLTree()#key index, value: index; this is for checking new roots
         self.new_names = bintrees.AVLTree()# index:index, of the new names (new parent indexes)
-        self.lambd = 1/(2*self.Ne) # lambd in expovariate
+        self.lambd = 1/(self.Ne) # lambd in expovariate
         self.NAM_recParent = bintrees.AVLTree() # rec parent with seg = None
         self.NAM_coalParent = bintrees.AVLTree() # coal parent with seg = None
         self.coal_to_cleanup = bintrees.AVLTree()# ca parent with atleast a child.seg = None
@@ -155,10 +184,7 @@ class MCMC(object):
         self.arg.nextname = max(self.arg.nodes) + 1
         self.summary = pd.DataFrame(columns=('likelihood', 'prior', "posterior",
                                              'ancestral recomb', 'non ancestral recomb',
-                                                'branch length', 'setup'))
-        np.save(os.getcwd()+"/true_values.npy", [self.log_lk, self.log_prior, self.log_lk + self.log_prior,
-                                                 self.arg.branch_length,self.arg.num_ancestral_recomb,
-                                                 self.arg.num_nonancestral_recomb])
+                                                'branch length',"mu", "r", "Ne", 'setup'))
         #---- kuhner
         self.floats = bintrees.AVLTree()#floatings: index:index
         self.partial_floatings = collections.defaultdict(list)# index:[a, b, num]
@@ -166,27 +192,86 @@ class MCMC(object):
         self.higher_times = collections.defaultdict(set)#time: (index)
         self.active_nodes = bintrees.AVLTree()#node.index
         self.active_links = 0
+        self.original_interval = collections.defaultdict(list)# node.index:[left, right]
         #--- test
         self.detail_acceptance = collections.defaultdict(list)# transiton:[total, accepted]
+        #---------- current ARG
+        self.original_ARG = copy.deepcopy(self.arg) #  self.arg.copy()
+        # for sd in update parameters
+        self.default_mutation_rate = mutation_rate
+        self.default_recombination_rate = recombination_rate
+        self.default_Ne = Ne
+
+    def read_convert_data(self):
+        '''
+        convert the imput data for the required data
+        :param: general_path to the data
+        :param haplotype_name: the haplotype name, important, this file should be a \t sep txt file
+            with no header and n*m of the nuceotides
+        :param ancestral_allele_name: the ancestral name. the file in this
+            path should be a txt file with '' delimiter
+        :param snp_pos_name: ANP chromosome posiitions. a txt file 1*m,  '' delimiter.
+        '''
+        haplotype_df = pd.read_csv(self.input_data_path + '/'+
+                                   self.haplotype_data_name, sep="\t",header=None)
+        if self.verbose:
+            print("######succesfuly read haplotype file ")
+        haplotype_df.columns=list(range(haplotype_df.shape[1]))
+        ancestral_allele_np= np.loadtxt(self.input_data_path+'/'+
+                                        self.ancAllele_data_name, dtype='str')
+        if self.verbose:
+            print("######succesfuly read ancestral_allele file")
+        snp_pos_np= np.loadtxt(self.input_data_path+'/'+self.snpPos_data_name)
+        if self.verbose:
+            print("######succesfuly read SNP positions file ")
+        new_data = {}
+        for ind  in range(haplotype_df.shape[1]):
+            derived_df= haplotype_df[ind]!= ancestral_allele_np[ind]
+            seq_carry_derived = derived_df.index[derived_df].tolist()
+            position = int(math.ceil(snp_pos_np[ind]))
+            b = bintrees.AVLTree()
+            b.update({k: k for k in seq_carry_derived})
+            new_data[position] = b
+        for key in new_data.keys():
+            assert 0<len(new_data[key])<self.n
+        self.data = new_data
 
     def get_initial_arg(self):
         '''
         TODO: build an ARG for the given data.
         '''
-        ts_full = msprime.simulate(sample_size = self.n, Ne = self.Ne,
-                                   length = self.seq_length, mutation_rate = self.mu,
-                                   recombination_rate = self.r,
-                                   random_seed = 20, record_full_arg = True)
-        tsarg = treeSequence.TreeSeq(ts_full)
-        tsarg.ts_to_argnode()
-        self.arg = tsarg.arg
-        self.data = treeSequence.get_arg_genotype(ts_full)
+        if self.ts_full == None:
+            #real data
+            self.read_convert_data()
+        else:
+            ts_full= self.ts_full
+            tsarg = treeSequence.TreeSeq(ts_full)
+            tsarg.ts_to_argnode()
+            self.data = treeSequence.get_arg_genotype(ts_full)
+            #----- true values
+            self.arg = tsarg.arg
+            if  self.verbose:
+                print("true number of rec", len(self.arg.rec)/2)
+            self.log_lk = self.arg.log_likelihood(self.mu, self.data)
+            self.log_prior = self.arg.log_prior(self.n, self.seq_length,
+                                                self.r, self.Ne, False)
+            np.save(self.outpath+"/true_values.npy", [self.log_lk, self.log_prior,
+                                                  self.log_lk + self.log_prior,
+                                                 self.arg.branch_length,
+                                                  self.arg.num_ancestral_recomb,
+                                                 self.arg.num_nonancestral_recomb,
+                                                  self.mu, self.r, self.Ne])
+        #-----initial
+        init= Initial(self.data, self.n, self.seq_length,
+                     self.Ne, self.mu, self.r)
+        init.build()
+        self.arg = init.arg
+        if self.verbose:
+            print("initial num rec:", len(self.arg.rec)/2)
         self.m = len(self.data)
         self.log_lk = self.arg.log_likelihood(self.mu, self.data)
         self.log_prior = self.arg.log_prior(self.n, self.seq_length,
                                             self.r, self.Ne, False)
-
-        # --------
 
     def truncated_expo(self, a, b, lambd):
         '''
@@ -219,11 +304,12 @@ class MCMC(object):
             if kuhner:
                 ratio += (self.transition_prob.log_prob_reverse -\
                           self.transition_prob.log_prob_forward)
-        print("forward_prob:", self.transition_prob.log_prob_forward)
-        print("reverse_prob:", self.transition_prob.log_prob_reverse)
-        print("ratio:", ratio)
-        print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
-        print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
+        if  self.verbose:
+            print("forward_prob:", self.transition_prob.log_prob_forward)
+            print("reverse_prob:", self.transition_prob.log_prob_reverse)
+            print("ratio:", ratio)
+            print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
+            print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
         if math.log(random.random()) <= ratio: # accept
             self.log_lk = new_log_lk
             self.log_prior = new_log_prior
@@ -339,28 +425,23 @@ class MCMC(object):
         return ret, detach_snps, completed_snps
 
     def update_ancestral_material(self, node_index, nodes_to_update,
-                                  nodesToUpdateTimes, backtrack = False, rem=None):
-        '''update the materials of the parent(s) of node
+                                  nodesToUpdateTimes, rem = None):
+        '''
+        update the materials of the parent(s) of node
         do not change any parent/child node, only update materials
-        if backtrack = True: retrieve to the original ARG
         '''
         s = nodes_to_update.pop(node_index)
         node = self.arg.__getitem__(node_index)
-        if backtrack and s == None:#BUG7
-            s = self.arg.copy_node_segments(node)
         if rem != None and node.index == rem.index:#BUG7
             s = self.arg.copy_node_segments(node)
         if node.left_parent is None:
-            if not backtrack:
-                raise ValueError("The root node shouldn't be added "
+            raise ValueError("The root node shouldn't be added "
                              "to node_to_check at the first place")
         elif node.left_parent.index == node.right_parent.index:
-            #common ancestor event
+            # common ancestor event
             node_sib = node.sibling()
             if nodes_to_update.__contains__(node_sib.index):
                 sib_segs = nodes_to_update.pop(node_sib.index)
-                if backtrack and sib_segs == None: #BUG7
-                    sib_segs = self.arg.copy_node_segments(node_sib)
                 if rem != None and node_sib.index == rem.index:
                     sib_segs = self.arg.copy_node_segments(node_sib)
             else:# copy them to remain intact
@@ -372,8 +453,6 @@ class MCMC(object):
                 assert y is not None
                 z = None
                 defrag_required = False
-                if backtrack:
-                    node.left_parent.snps.clear()
                 while x is not None or y is not None:
                     alpha = None
                     if x is None or y is None:
@@ -404,9 +483,6 @@ class MCMC(object):
                                                     node.left_parent, x.union_samples(y))
                             if alpha.is_mrca(self.n):
                                 alpha = None
-                            if backtrack and alpha != None:
-                                # put mutations on the node if any
-                                alpha.add_snps(node.left_parent, self.data)
                             if x.right == right:
                                 x = x.next
                             else:
@@ -429,50 +505,18 @@ class MCMC(object):
                 if z is not None:
                     z = z.get_first_segment()
                     #--- this is where we should add to floatings
-                    if not backtrack:
-                        if node.left_parent.left_parent is None:
-                            # this is floating
-                            self.floatings[node.left_parent.time] = node.left_parent.index
-                            self.floatings_to_ckeck[node.left_parent.index] = node.left_parent.index
+                    if node.left_parent.left_parent is None:
+                        # this is floating
+                        self.floatings[node.left_parent.time] = node.left_parent.index
+                        self.floatings_to_ckeck[node.left_parent.index] = node.left_parent.index
                     node.left_parent.first_segment = z
                     self.arg.store_node(z, node.left_parent)
                     self.NAM_coalParent.discard(node.left_parent.index)
                 else:
                     node.left_parent.first_segment = None
-                    if backtrack:
-                        if node.left_parent.left_parent != None:
-                            assert node.left_parent.left_parent.index == node.left_parent.right_parent.index
-                            parentSib = node.left_parent.sibling()
-                            if not self.new_names.__contains__(parentSib.index):# BUG4_2 NOTES
-                                if not nodes_to_update.__contains__(parentSib.index):
-                                    # self.arg.copy_node_segments(parentSib)
-                                    nodes_to_update[parentSib.index] = None# BUG7 it might change so for now NONE
-                                if parentSib.left_parent.left_parent != None: #BUG7 : time order
-                                    nodesToUpdateTimes[parentSib.left_parent.left_parent.time].add(parentSib.index)
-                                    if nodesToUpdateTimes.__contains__(parentSib.left_parent.time):
-                                        del nodesToUpdateTimes[parentSib.left_parent.time]
-                                else:
-                                    nodesToUpdateTimes[parentSib.left_parent.time].add(parentSib.index)
-                            if nodes_to_update.__contains__(node.left_parent.index):
-                                del nodes_to_update[node.left_parent.index]
-                            if not self.new_names.__contains__(node.left_parent.left_parent.index):
-                                print("node ", node.index, "sib", node_sib.index,
-                                      "leftparent", node.left_parent.index)
-                                print("grandfather", node.left_parent.left_parent.index)
-                                print("self.new_names", self.new_names)
-                                print("nodes_to_update", nodes_to_update)
-                                print("nodesToUpdateTimes", nodesToUpdateTimes)
-                                self.print_state()
-                            assert self.new_names.__contains__(node.left_parent.left_parent.index)
-                            self.arg.detach(node.left_parent, parentSib)
-                            del self.arg.nodes[node.left_parent.left_parent.index]
-                            node.left_parent.left_parent = None
-                            node.left_parent.right_parent = None
                     self.NAM_coalParent[node.left_parent.index] = node.left_parent.index
                 self.coal_to_cleanup.discard(node.left_parent.index)
             elif s is None and sib_segs is None:
-                if backtrack:
-                    raise ValueError("there shouldnt be a NAM while we backtrack")
                 node.left_parent.first_segment = None
                 if node.left_parent.left_parent is not None:
                     nodes_to_update[node.left_parent.index] = None
@@ -480,16 +524,6 @@ class MCMC(object):
                 self.NAM_coalParent[node.left_parent.index] = node.left_parent.index
                 self.coal_to_cleanup[node.left_parent.index] = node.left_parent.index
             else: # s is  None or  sib_seg is None
-                if backtrack:
-                    print("node is", node.index, "node_sib", node_sib.index,
-                          "node.parent", node.left_parent.index, "node.time",
-                          node.time, "sibtime", node_sib.time)
-                    print("new names", self.new_names)
-                    print("roots", self.arg.roots)
-                    print("nodes_to_update", nodes_to_update)
-                    print("their times", nodesToUpdateTimes)
-                    self.print_state()
-                    raise ValueError("s or sib seg is None in backtrack")
                 if sib_segs is None:
                     z = s.get_first_segment()
                 else:# s is None
@@ -556,21 +590,7 @@ class MCMC(object):
             # ARG has been constructed by checking which ones will violate snps
             # node = self.arg.alloc_node(self.arg.new_name(), time, lhs_tail.node, lhs_tail.node)
             # lhs_tail.node.left_parent = node
-            if backtrack:
-                if lhs_tail is  None or z is  None:
-                    print("in backtrack node is ", node.index,
-                          "node.left_parent:", node.left_parent.index)
-                    print("node.right_parent", node.right_parent.index,
-                          "node.breakpoint", node.breakpoint)
-                    print("node.head.left", node.first_segment.left,
-                          "node.tail.right", node.get_tail().right)
-                assert lhs_tail is not None and z is not None
             self.arg.store_node(lhs_tail, node.left_parent)
-            # node = self.arg.add(node1)
-            # self.R[node.index] = node.index
-            # self.arg.rec[node.index] = node.index
-            # node = self.arg.alloc_node(self.arg.new_name(), time,  z.node, z.node)
-            # z.node.right_parent = node
             self.arg.store_node(z, node.right_parent)
             # if NAM put them in NAM_recParent
             if lhs_tail is None:
@@ -623,9 +643,8 @@ class MCMC(object):
             seg = seg.next
         return detach_snps
 
-    def update_all_ancestral_material(self, node, backtrack = False, rem = None):
+    def update_all_ancestral_material(self, node, rem = None):
         '''update the ancestral materials of all the ancestors of node
-        if backtrack = True: we retrieve the original ARG
         :param node: a list of nodes [node]
         :param rem, if the move is  remove_recombination and in
         forward the node entry if of length 2. the first is child and
@@ -635,10 +654,8 @@ class MCMC(object):
         their_times = collections.defaultdict(set) #key:time, value (set of indexes)
         for n in node:
             if n.left_parent is not None:
-                if backtrack:#BUG7
-                    nodes_to_update[n.index] = None
-                else:#BUG7
-                    nodes_to_update[n.index] = self.arg.copy_node_segments(n)
+                #BUG7
+                nodes_to_update[n.index] = self.arg.copy_node_segments(n)
                 their_times[n.left_parent.time].add(n.index)
         if rem != None:# only one case remove forward node =[child, remParentSib]
             nodes_to_update[rem.index] = None
@@ -658,7 +675,7 @@ class MCMC(object):
                 if nodes_to_update.__contains__(next_index):# BUG4_2
                     if self.arg.__contains__(next_index):# might pruned already in backtrack
                         nodes_to_update, nodes_times = self.update_ancestral_material(next_index,
-                                                        nodes_to_update, their_times, backtrack, rem)
+                                                        nodes_to_update, their_times, rem)
                     else:
                         del nodes_to_update[next_index]
             current_time = min_time
@@ -683,115 +700,42 @@ class MCMC(object):
                 break
         return sc_original_parent, valid
 
-    def find_original_parent(self, node):
-        '''find the original parent for node, if any. Original parent is
-        the parent of node in the original ARG'''
-        original_parent = None; valid = True; second_child = None
-        path =[node.index]
-        while node.left_parent != None:
-            if node.left_parent.index != node.right_parent.index:
-                if node.left_parent.first_segment == None or\
-                    node.right_parent.first_segment == None:
-                    valid = False
-                    break
-                assert not self.new_names.__contains__(node.left_parent.index)
-                original_parent = node.left_parent
-                if node.left_child.index == path[-1]:
-                    #sec child is the second child of the last node berfore original_p
-                    second_child = node.right_child
-                else:
-                    second_child = node.left_child
-                break
-            elif self.new_names.__contains__(node.left_parent.index):
-                path.append(node.index)
-                node = node.left_parent
-            else:
-                original_parent = node.left_parent
-                assert original_parent.left_child != original_parent.right_child
-                if node.index == original_parent.left_child.index:
-                    second_child = original_parent.right_child
-                else:
-                    second_child = original_parent.left_child
-                break
-        return original_parent, valid, second_child
-
-    def find_original_child(self, node, second_child = False):
+    def find_original_child(self, node):
         '''find the original child for node, the child in the original ARG
-        :param second_child if we find original child for second child of original parent.
-            if False: find original child for new root
         '''
         original_child = None
-        if not second_child:
-            while node.left_child != None:
-                if not self.floatings_to_ckeck.__contains__(node.left_child.index) and \
-                    not self.floatings_to_ckeck.__contains__(node.right_child.index):
+        while node.left_child != None:
+            leftch_ind =node.left_child.index
+            rightch_ind = node.right_child.index
+            if leftch_ind == rightch_ind:
+                if not self.floatings_to_ckeck.__contains__(leftch_ind):
                     original_child = node
                     break
-                elif self.floatings_to_ckeck.__contains__(node.left_child.index) and \
-                    self.floatings_to_ckeck.__contains__(node.right_child.index):
+                else:
                     break
-                elif self.floatings_to_ckeck.__contains__(node.left_child.index):
+            else:
+                if not self.floatings_to_ckeck.__contains__(leftch_ind) and \
+                    not self.floatings_to_ckeck.__contains__(rightch_ind):
+                    original_child = node
+                    break
+                elif self.floatings_to_ckeck.__contains__(leftch_ind) and \
+                    self.floatings_to_ckeck.__contains__(rightch_ind):
+                    break
+                elif self.floatings_to_ckeck.__contains__(leftch_ind):
                     node = node.right_child
                 else:
                     node = node.left_child
-        else:
-            if not self.new_names.__contains__(node.index):# BUG3 NOTES
-                    original_child = node
-            else:
-                while node.left_child != None:
-                    if not self.new_names.__contains__(node.left_child.index) and \
-                        not self.new_names.__contains__(node.right_child.index):
-                        original_child = node
-                        break
-                    elif self.new_names.__contains__(node.left_child.index) and \
-                        self.new_names.__contains__(node.right_child.index):
-                        print("node is", node.index, "node.left_child.index", node.left_child.index,
-                              "node.right_child.index", node.right_child.index)
-                        print("self.new_names", self.new_names)
-                        raise ValueError("There must be an original "
-                                         "child for the second child.")
-                        break
-                    elif self.new_names.__contains__(node.left_child.index):
-                        node = node.right_child
-                    else:
-                        node = node.left_child
         return original_child
 
-    def is_new_root(self, node):
-        '''
-        is the node a new root  in  new ARG, so that will be floating in
-         the reverse move?
-         return original_parent and original_child. if both are not None, then yes node is
-         a new root and need to calculate the reverse prob for that. otherwise, No!
-         by original parent or original child, I mean the parent/child that
-         exist in the original ARG.
-         If a node doesnt have an original parent:
-            1. it was a root in G_{j}
-            2. it is a result of floating lineages, then no need to calc reverse
-
-         '''
-        original_child = None
-        original_parent = None
-        valid = True
-        second_child = None
-        if node.left_child.first_segment !=  None and\
-                node.right_child.first_segment != None:
-            # find original parent
-            original_parent, valid, second_child = self.find_original_parent(node)
-            if valid and original_parent != None:
-                #now find original child
-                original_child = self.find_original_child(node)
-        return original_parent, original_child, valid, second_child
-
-    def generate_new_time(self, lower_bound =0, upper_bound=1, root= True):
+    def generate_new_time(self, lower_bound = 0, upper_bound=1, root= True):
         '''generate a new time'''
         if root:
             return lower_bound + random.expovariate(self.lambd)
         else:
             #from uniform
-            # return  random.uniform(lower_bound, upper_bound)
+            return  random.uniform(lower_bound, upper_bound)
             # from truncate exponential
-            return self.truncated_expo(lower_bound, upper_bound, self.lambd)
+            # return self.truncated_expo(lower_bound, upper_bound, self.lambd)
 
     def spr_reattach_floatings(self, detach, sib, old_merger_time):
         '''reattach all the floatings including detach'''
@@ -805,9 +749,7 @@ class MCMC(object):
                 still_floating = True
             elif node.first_segment is not None and node.left_parent is None:
                 still_floating = True
-            if not still_floating:
-                self.floatings.discard(min_time)
-            else:
+            if still_floating:
                 # first check if the move is valid ---> do this in cleanup
                 # if  node.left_child.first_segment is None or \
                 #     node.right_child.first_segment is None:
@@ -816,7 +758,8 @@ class MCMC(object):
                 # --- reattach
                 # 1. find potential reattachment
                 all_reattachment_nodes = self.spr_reattachment_nodes(min_time)
-                if node.left_parent is not None: # only F
+                if node.left_parent is not None: # only detach
+                    assert node.index == detach.index
                     all_reattachment_nodes.discard(node.left_parent.index)
                     #C is not added to all_reattach_nodes: because t_c<t_F
                     # and sib.left_parent = None ---after detach if P is root
@@ -828,7 +771,10 @@ class MCMC(object):
                     raise ValueError("all_reattachment_nodes is empty."
                                      " There must be atleast one node to reattach.")
                 reattach = self.arg.__getitem__(random.choice(list(all_reattachment_nodes)))
-                print("node", node.index, "rejoins to ", reattach.index)
+                if  self.verbose:
+                    print("node", node.index,"with time", node.time, "rejoins to ",
+                      reattach.index, "with time", reattach.time)
+
                 #---trans_prob for choose reattach
                 self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes))
                 max_time = max(min_time, reattach.time)
@@ -836,38 +782,33 @@ class MCMC(object):
                     self.floatings.discard(old_merger_time) # this is for removing sib
                 if reattach.left_parent is None:
                     new_merger_time = self.generate_new_time(max_time)
-                    print("new time is from an exponential distribution"
-                          " + reattach.time:", reattach.time)
-                    print("new_merger_time", new_merger_time)
+                    if  self.verbose:
+                        print("new time is from an exponential distribution"
+                              " + reattach.time:", reattach.time)
+                        print("new_merger_time", new_merger_time)
                     self.transition_prob.spr_reattach_time(new_merger_time, max_time, 0,
                                                            True, True, self.lambd)
                 else:
                     new_merger_time = self.generate_new_time(max_time, reattach.left_parent.time, False)
+                    if  self.verbose:
+                        print("new_merger_time", new_merger_time, "reattach.left_parent.time",
+                          reattach.left_parent.time)
+                    if max_time >= reattach.left_parent.time:
+                        self.print_state()
+                        print("all_reattachment_nodes\n", all_reattachment_nodes)
+                        print("node_time", node.time, "reattach_time", reattach.time,
+                              "reattach_left_parent_time", reattach.left_parent.time)
+                        print("node", node.index, "reattach", reattach.index,
+                              "reattach.left_parent.index", reattach.left_parent.index)
+                        print("new_merger_time", new_merger_time)
                     self.transition_prob.spr_reattach_time(new_merger_time, max_time,
-                                                   reattach.left_parent.time, False,True,self.lambd)
-                    print("new_merger_time", new_merger_time)
+                                                   reattach.left_parent.time, False, True, self.lambd)
                 #-- reattach
                 self.new_names = self.arg.reattach(node, reattach, new_merger_time, self.new_names)
                 #---- update
                 self.update_all_ancestral_material([node])
                 #---
                 self.floatings.discard(reattach.time) #if any
-
-    def revert_spr(self, detach, sib, old_merger_time, oldparent_ind):
-        '''revert to the original ARG'''
-        new_sib = detach.sibling()
-        self.arg.detach(detach, new_sib)
-        new_names = self.arg.reattach(detach, sib, old_merger_time, self.new_names)
-        # do we need to check the grand parent too? No
-        # update materials
-        if self.new_names.__contains__(new_sib.index):# BUG4 NOTES
-            self.update_all_ancestral_material([detach], True)
-        else:
-            self.update_all_ancestral_material([detach, new_sib], True)
-        if detach.left_parent.index != oldparent_ind:# BUG6
-            new_name = detach.left_parent.index
-            self.arg.rename(new_name, oldparent_ind)
-            self.arg.coal.discard(new_name)
 
     def clean_up(self, coal_to_cleanup):
         '''clean up the Accepted ARG. the ancestral material and snps
@@ -921,7 +862,7 @@ class MCMC(object):
             del self.arg.nodes[node.index]
 
     def spr_validity_check(self, node,  clean_nodes,
-                           detach_snps, detach, completed_snps, reverse_done):
+                           detach_snps,  completed_snps, reverse_done):
         '''after rejoining all the floating, it is time to check if
         the changes cancels any recombination.
         Also, if there is a new root (node.segment == None and node.left_parent!=None),
@@ -967,49 +908,71 @@ class MCMC(object):
             else:
                 # might be new root
                 # is it really new root?
-                original_parent, original_child,\
-                valid, second_child = self.is_new_root(node)
-                # if we have original parent and original child
-                # the floating will be from node.time and rejoins to original.parent.time
-                # reverse: choose original parent, choose time on
-                # original_parent's second_child.time to original parent.left_parent.time
-                # then add what to clean_up? node.left_parent, since we need to check incompatibility
-                # without considering incompatibility then original_parent.
-                #second child is the second child of the original_parent. we need to find its original child
-                # and original parent (if any) for the time prob calculation
-                if valid and original_parent != None and original_child != None and\
-                        not reverse_done.__contains__(node.index):# NOTE AFTER BUG5
-                    all_reattachment_nodes = self.spr_reattachment_nodes(node.time, False)
-                    all_reattachment_nodes.discard(original_parent.index)
-                    all_reattachment_nodes.discard(node.index)
-                    # ---- reverse of choosin g a lineage to rejoin
-                    self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes), False)
-                    #----- reverse prob time
-                    if node.index != detach.index: # already done for detach
-                        # find the origin child and origin parent of second child (if any)
-                        sc_origin_child = self.find_original_child(second_child, True)
-                        assert sc_origin_child is not None
-                        if second_child.left_parent.index == original_parent.index:
-                            # find original parent for second child
-                            sc_original_parent, valid = self.find_sc_original_parent(second_child)
+                # find origina_child: it might be a parent of two floating lins, then NAM in reverse.
+                original_child = self.find_original_child(node)
+                if original_child != None and\
+                        not reverse_done.__contains__(node.index):# NOTE AFTER BUG5:
+                    if not self.original_ARG.__contains__(original_child.index):
+                        if self.original_ARG.__contains__(original_child.left_child.index):
+                            original_child = original_child.left_child
+                        elif self.original_ARG.__contains__(original_child.right_child.index):
+                            original_child = original_child.right_child
                         else:
-                            # original parent is a parent of a rec then:
-                            sc_original_parent = original_parent
-                        if valid:
-                            assert node.index != second_child.index
-                            if sc_original_parent is None:
+                            valid = False
+                            # if one or both of original_child is new_name, then
+                            # let say in original p1= 4, c1= 1. F=2 joins c1, new parent p2= 3.
+                            # now parent of c1 is p2. if F2 rejoins F, new parent is p3. now (p3, c1) are
+                            #sibling with parent p2. If p2 become root, none of its child are
+                            # in floating, then we guess p2 is in original while it is not.
+                            # if F3 joins c1 at a time before p1 with new paren p4,
+                            # then p3 and p4 both are new name and child of p2. if p2 is root, again
+                            # the function says it is in original but it is not, while this means c1
+                            # can be floating from time of p2. finding this is difficult so I ignore.
+                    original_parent = None
+                    if valid:
+                        if original_child.time == self.original_ARG.__getitem__(original_child.index).time:
+                            original_parent = self.original_ARG.__getitem__(original_child.index).left_parent
+                        else:# the original_child is detach_parent and its time is different
+                            valid= False
+                    if original_parent is not None:# original_child was not a root in G_j
+                        if original_parent.left_child.index == original_parent.right_child.index:
+                            # it is a rec parent
+                            valid = False
+                        else:
+                            second_child = original_parent.left_child
+                            if second_child.index == original_child.index:
+                                second_child = original_parent.right_child
+                            all_reattachment_nodes = self.spr_reattachment_nodes(node.time, False)
+                            all_reattachment_nodes.discard(original_parent.index)
+                            all_reattachment_nodes.discard(node.index)
+                            # ---- reverse of choosin g a lineage to rejoin
+                            self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes), False)
+                            #----- reverse prob time
+                            # if node.index != detach.index: # already done for detach
+                            original_grandparent = original_parent.left_parent
+                            # assert node.index != second_child.index
+                            if original_grandparent is None:
                                 self.transition_prob.spr_reattach_time(original_parent.time,
-                                        max(node.time, second_child.time), 0 , True, False, self.lambd)
+                                        max(node.time, second_child.time), 0, True, False, self.lambd)
                             else:
+                                if original_grandparent.time <= max(node.time, second_child.time):
+                                    self.original_ARG.print_state()
+                                    print("original_grandparent.time:", original_grandparent.time)
+                                    print("node.time", node.time, "second_child.time", second_child.time)
+                                    print("original_grandparent", original_grandparent.index)
+                                    print("original_parent:", original_parent.index, "its time",
+                                          original_parent.index)
+                                    print("second_child", second_child.index, "original_child",
+                                          original_child.index)
+                                    print("node:", node.index)
                                 self.transition_prob.spr_reattach_time(original_parent.time,
-                                        max(node.time, second_child.time), sc_original_parent.time
-                                                                       ,False, False, self.lambd)
+                                        max(node.time, second_child.time), original_grandparent.time
+                                                                        ,False, False, self.lambd)
                             reverse_done[second_child.index] = second_child.index
-                # add nodeleft parent ot cleanup
                 clean_nodes[node.left_parent.time].add(node.left_parent.index)
         return valid, clean_nodes, detach_snps, completed_snps, reverse_done
 
-    def all_validity_check(self, clean_nodes, detach_snps, detach):
+    def all_validity_check(self, clean_nodes, detach_snps):
         '''do spr_validity_check()for all the needed nodes
         '''
         valid = True # move is valid
@@ -1034,7 +997,7 @@ class MCMC(object):
                 node = nodes.pop(0)
                 valid, clean_nodes, detach_snps, completed_snps, reverse_done = \
                     self.spr_validity_check(node, clean_nodes, detach_snps,
-                                            detach, completed_snps, reverse_done)
+                                             completed_snps, reverse_done)
                 if not valid:
                     break
         return valid
@@ -1044,6 +1007,9 @@ class MCMC(object):
         Transition number 1
         perform an SPR move on the ARG
         '''
+        # self.original_ARG = copy.deepcopy(self.arg)#self.arg.copy()
+        self.arg.dump(path = self.outpath, file_name = 'arg.arg')
+        self.original_ARG =  self.arg.load(path = self.outpath+'/arg.arg')
         assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         # Choose a random coalescence node, and one of its children to detach.
         # Record the current sibling and merger time in case move is rejected.
@@ -1062,9 +1028,12 @@ class MCMC(object):
         self.transition_prob.spr_choose_detach(len(self.arg.coal))#1
         #---------------
         old_merger_time = detach.left_parent.time
-        print("detach node", detach.index, " time", detach.time)
+        if  self.verbose:
+            print("detach node", detach.index, " time", detach.time)
         sib = detach.sibling()
-        print("sibling node", sib.index, "parent", detach.left_parent.index)
+        if  self.verbose:
+            print("sibling node", sib.index, "parent", detach.left_parent.index)
+        #-- reverse transition for time
         #-- reverse transition for time
         if detach.left_parent.left_parent is None:
             self.transition_prob.spr_reattach_time(old_merger_time, max(detach.time, sib.time),
@@ -1073,7 +1042,8 @@ class MCMC(object):
             self.floatings_to_ckeck[sib.index] = sib.index
         else:
             self.transition_prob.spr_reattach_time(old_merger_time, max(detach.time, sib.time),
-                                                sib.left_parent.left_parent.time, False, False, self.lambd)
+                                                sib.left_parent.left_parent.time,
+                                                   False, False, self.lambd)
         #---detach
         self.arg.detach(detach, sib)
         #--- update arg
@@ -1084,7 +1054,8 @@ class MCMC(object):
         #update arg.coal---> what about new ones? added in reattach
         # coal_to_cleanup = self.update_arg_coal()
         if self.NAM_recParent: # rec is canceled, reject
-            print("not valid due to removing rec")
+            if  self.verbose:
+                print("not valid due to removing rec")
             valid = False
         else:
             #=--- Vlidity check, do mutations, and revers probs
@@ -1102,13 +1073,9 @@ class MCMC(object):
             else: # sib is a root with seg = None and left_parent  = None
                 all_reattachment_nodes[sib.index] = sib.index
             self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes), False)
-            valid = self.all_validity_check(clean_nodes, detach_snps, detach)
-        print("valid is ", valid)
+            valid = self.all_validity_check(clean_nodes, detach_snps)
         if valid:
             #-- calc prior and likelihood and then M-H
-            old_branch_length = self.arg.branch_length
-            old_anc_recomb = self.arg.num_ancestral_recomb
-            old_nonancestral_recomb = self.arg.num_nonancestral_recomb
             new_log_lk = self.arg.log_likelihood(self.mu, self.data)
             new_log_prior, new_roots, new_coals = \
                 self.arg.log_prior(self.n,self.seq_length, self.r,
@@ -1116,7 +1083,8 @@ class MCMC(object):
             #--- reverse prob choose detach
             self.transition_prob.spr_choose_detach(len(new_coals), False)
             self.Metropolis_Hastings(new_log_lk, new_log_prior)
-            print("mh_accept ", self.accept)
+            if  self.verbose:
+                print("mh_accept ", self.accept)
             #if acceptt
             if self.accept: # clean up
                 # the ancestral material already set up. we just need to
@@ -1125,15 +1093,11 @@ class MCMC(object):
                 self.check_root_parents(new_roots)
                 self.arg.roots = new_roots # update roots
                 self.arg.coal = new_coals
-            else: # rejected: retrieve the original- backtrack--> no changes on arg.coal
-                assert old_anc_recomb + old_nonancestral_recomb ==\
-                       self.arg.num_ancestral_recomb + self.arg.num_nonancestral_recomb
-                self.arg.branch_length = old_branch_length
-                self.arg.num_ancestral_recomb = old_anc_recomb
-                self.arg.num_nonancestral_recomb = old_nonancestral_recomb
-                self.revert_spr(detach, sib, old_merger_time, oldparent_ind)
+                assert len(self.arg.rec) == len(self.original_ARG.rec)
+            else: # rejected: retrieve the original-
+                self.arg = self.original_ARG
         else:
-            self.revert_spr(detach, sib, old_merger_time, oldparent_ind)
+            self.arg = self.original_ARG
         self.empty_containers()
 
     #============
@@ -1151,6 +1115,7 @@ class MCMC(object):
         self.transition_prob.log_prob_reverse = 0
         self.arg.nextname = max(self.arg.nodes) + 1
         self.arg.get_available_names()
+        self.original_ARG = ARG()
 
     def detach_otherParent(self, remParent, otherParent, child):
         '''child ---rec---(remPrent, otherParent), now that we've removed
@@ -1182,41 +1147,6 @@ class MCMC(object):
             parent.update_child(otherParent, child)
         return invisible
 
-    def revert_remove_recombination(self, remParent, otherParent,
-                                child, remGrandparent, remPsib,
-                                old_child_bp, invisible):
-        '''revert REMOVE rec to the original ARG'''
-        self.arg.nodes[remParent.index] = remParent
-        self.arg.nodes[otherParent.index] = otherParent
-        self.arg.nodes[remGrandparent.index] = remGrandparent
-        if invisible:
-            assert remParent.left_parent.index == remGrandparent.index
-            assert otherParent.left_parent.index == remGrandparent.index
-            assert remParent.left_child.index == child.index
-            assert otherParent.left_child.index == child.index
-            child.left_parent.update_child(child, remGrandparent)
-            child.right_parent.update_child(child, remGrandparent)
-            remGrandparent.breakpoint = child.breakpoint
-        else:
-            new_names = self.arg.reattach(remParent, remPsib,
-                             remParent.left_parent.time, self.new_names)
-            # reattach other parent to child
-            assert otherParent.left_child.index == child.index
-            assert remParent.left_child.index == child.index
-            otherParent.left_parent = child.left_parent
-            otherParent.right_parent = child.right_parent
-            child.left_parent.update_child(child, otherParent)
-            child.right_parent.update_child(child, otherParent)
-            otherParent.breakpoint = child.breakpoint
-        child.left_parent = remParent
-        child.right_parent = otherParent
-        if remParent.first_segment.left > otherParent.first_segment.left:
-            child.right_parent = remParent
-            child.left_parent = otherParent
-        child.breakpoint = old_child_bp
-        #ancestral material
-        self.update_all_ancestral_material([remParent, otherParent], True)
-
     def remove_recombination(self):
         '''
         transition number 2
@@ -1229,6 +1159,9 @@ class MCMC(object):
         5. check validity, compatibility and reverse prob
         6. if not valid, revert the move
         '''
+        # self.original_ARG = copy.deepcopy(self.arg)#copy.deepcopy(self.arg)
+        self.arg.dump(path = self.outpath, file_name = 'arg.arg')
+        self.original_ARG =  self.arg.load(path = self.outpath+'/arg.arg')
         assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         assert not self.arg.rec.is_empty()
         #1. choose a rec parent
@@ -1254,16 +1187,16 @@ class MCMC(object):
             if remParent.left_parent.index != otherParent.left_parent.index:#visible
                 self.arg.detach(remParent, remPsib)
             #--- detach otherParent
-            print("remPrent",remParent.index, "otherParent",
-                  otherParent.index,"child", child.index)
-            print("remPsib", remPsib.index, "remGrandparent",
-                  remGrandparent.index)
-            print("otherparentlp", otherParent.left_parent.index,
-                  "otherparentrp", otherParent.right_parent.index)
-            print("childlp,", child.left_parent.index, "childrp",
-                  child.right_parent.index)
+            if  self.verbose:
+                print("remPrent",remParent.index, "otherParent",
+                      otherParent.index,"child", child.index)
+                print("remPsib", remPsib.index, "remGrandparent",
+                      remGrandparent.index)
+                print("otherparentlp", otherParent.left_parent.index,
+                      "otherparentrp", otherParent.right_parent.index)
+                print("childlp,", child.left_parent.index, "childrp",
+                        child.right_parent.index)
             invisible = self.detach_otherParent(remParent, otherParent, child)
-            print("invisible", invisible)
             #--- remove them from ARG
             remParent = self.arg.nodes.pop(remParent.index)
             otherParent = self.arg.nodes.pop(otherParent.index)
@@ -1277,7 +1210,8 @@ class MCMC(object):
             self.spr_reattach_floatings(remParent, otherParent, remParent.time)
             # is there any canceled rec?
             if self.NAM_recParent:
-                print("not valid due to removing rec")
+                if  self.verbose:
+                    print("not valid due to removing rec")
                 valid = False
             else:
                 #--- check validity, compatibility and mutations, reverse prob
@@ -1289,22 +1223,21 @@ class MCMC(object):
                 if not invisible and remPsib.left_parent != None: #not invisible rec
                     clean_nodes[remPsib.left_parent.time].add(remPsib.left_parent.index)
                     clean_nodes[remPsib.right_parent.time].add(remPsib.right_parent.index)
-                valid = self.all_validity_check(clean_nodes, remParent_snps, remParent)#third *arg is fake
-            print("valid is ", valid)
+                valid = self.all_validity_check(clean_nodes, remParent_snps)
+            if  self.verbose:
+                print("valid is ", valid)
             if valid:
-                #-- calc prior and likelihood and then M-H
-                old_branch_length = self.arg.branch_length
-                old_anc_recomb = self.arg.num_ancestral_recomb
-                old_nonancestral_recomb = self.arg.num_nonancestral_recomb
                 new_log_lk = self.arg.log_likelihood(self.mu, self.data)
                 new_log_prior, new_roots, new_coals = self.arg.log_prior(self.n,
                                                 self.seq_length, self.r, self.Ne, True, True)
-                #== reverse probability (ADD REC):
                 #1.choose a lin to add rec on
                 numnodes = self.arg.__len__()
                 empty_nodes = len(self.NAM_coalParent.union(new_roots))#exclude roots
                 self.transition_prob.add_choose_node(numnodes - empty_nodes, False)
+                # self.transition_prob.add_choose_node(len(self.original_ARG.nodes) -\
+                #                                      len(self.original_ARG.roots), False)
                 #2. choose a time on child to add rec
+                assert child.left_parent.time > remParent.time
                 self.transition_prob.spr_reattach_time(remParent.time,child.time,
                                         child.left_parent.time, False, False, self.lambd)
                 #3. choose a breakpoint on child
@@ -1329,7 +1262,8 @@ class MCMC(object):
                 self.transition_prob.spr_choose_reattach(len(all_reattachment_nodes), False)
                 #--- now mh
                 self.Metropolis_Hastings(new_log_lk, new_log_prior)
-                print("mh_accept ", self.accept)
+                if  self.verbose:
+                    print("mh_accept ", self.accept)
                 if self.accept:
                     #update coal, and rec
                     self.clean_up(self.coal_to_cleanup)
@@ -1338,17 +1272,11 @@ class MCMC(object):
                     self.arg.coal = new_coals
                     self.arg.rec.discard(remParent.index)
                     self.arg.rec.discard(otherParent.index)
+                    assert len(self.arg.rec) == len(self.original_ARG.rec)-2
                 else:
-                    assert old_anc_recomb + old_nonancestral_recomb - 1 ==\
-                        self.arg.num_ancestral_recomb + self.arg.num_nonancestral_recomb
-                    self.arg.branch_length = old_branch_length
-                    self.arg.num_ancestral_recomb = old_anc_recomb
-                    self.arg.num_nonancestral_recomb = old_nonancestral_recomb
-                    self.revert_remove_recombination(remParent, otherParent, child,
-                                            remGrandparent, remPsib, old_child_bp, invisible)
+                    self.arg = self.original_ARG
             else:
-                self.revert_remove_recombination(remParent, otherParent, child,
-                                            remGrandparent, remPsib, old_child_bp, invisible)
+                self.arg = self.original_ARG
         self.empty_containers()
 
     #=============
@@ -1368,27 +1296,6 @@ class MCMC(object):
                 root.right_parent = None
             else:
                 root.right_parent = None
-
-    def revert_add_recombination(self, child, followParent, detachParent, oldbr):
-        '''revert ADD rec move'''
-        # detach detachParent
-        sib = detachParent.sibling()
-        self.arg.detach(detachParent, sib)
-        child.left_parent = followParent.left_parent
-        child.right_parent = followParent.right_parent
-        child.breakpoint = oldbr
-        followParent.left_parent.update_child(followParent, child)
-        followParent.right_parent.update_child(followParent, child)
-        self.arg.rec.discard(followParent.index)
-        self.arg.rec.discard(detachParent.index)
-        del self.arg.nodes[followParent.index]
-        del self.arg.nodes[detachParent.index]
-        del self.arg.nodes[detachParent.left_parent.index]
-        if sib.index == followParent.index or\
-                self.new_names.__contains__(sib.index):#invisible rec #BUG4 NOTES
-            self.update_all_ancestral_material([child], True)
-        else:
-            self.update_all_ancestral_material([child, sib], True)
 
     def add_choose_child(self):
         '''choose a node to put a recombination on it'''
@@ -1457,6 +1364,9 @@ class MCMC(object):
             e) m-h
         forward transition: also reattach detachPrent, choose time to reattach
         '''
+        # self.original_ARG = copy.deepcopy(self.arg)#copy.deepcopy(self.arg)
+        self.arg.dump(path = self.outpath, file_name = 'arg.arg')
+        self.original_ARG =  self.arg.load(path = self.outpath+'/arg.arg')
         assert self.arg.__len__() == (len(self.arg.coal) + len(self.arg.rec) + self.n)
         child = self.add_choose_child()
         assert child.first_segment != None and child.left_parent != None
@@ -1464,7 +1374,8 @@ class MCMC(object):
         head = child.first_segment
         tail = child.get_tail()
         if tail.right - head.left <= 1:# no link
-            print("the node has no link")
+            if  self.verbose:
+                print("the node has less than 2 links")
             valid = False
         else:
             #breakpoint and time
@@ -1484,8 +1395,10 @@ class MCMC(object):
             else:
                 detachParent = newleftparent
             self.transition_prob.add_choose_node_to_float()#4
-            print("child", child.index, "followparent", followParent.index, "detach", detachParent.index,
-                  "old_leftpanre", oldleftparent.index, "oldrightparent", oldrightparent.index)
+            if  self.verbose:
+                print("child", child.index, "followparent", followParent.index,
+                      "detach", detachParent.index, "old_leftpanre",
+                      oldleftparent.index, "oldrightparent", oldrightparent.index)
             #----
             followParent.breakpoint = oldbreakpoint
             followParent.left_parent = oldleftparent
@@ -1493,15 +1406,17 @@ class MCMC(object):
             oldleftparent.update_child(child, followParent)
             oldrightparent.update_child(child, followParent)
             #now update ancestral material
-            print("child.left_parent", child.left_parent.index)
-            print("childrp", child.right_parent.index)
+            if  self.verbose:
+                print("child.left_parent", child.left_parent.index)
+                print("childrp", child.right_parent.index)
             self.update_all_ancestral_material([followParent])
             #--- reattach detachParent
             self.floatings[detachParent.time] = detachParent.index
             self.floatings_to_ckeck[detachParent.index] = detachParent.index
             self.spr_reattach_floatings(child, child, child.time) # fake *args
             if self.NAM_recParent: # rec is canceled, reject
-                print("not valid due to removing rec")
+                if  self.verbose:
+                    print("not valid due to removing rec")
                 valid = False
             else:
                 #validability, compatibility
@@ -1509,37 +1424,29 @@ class MCMC(object):
                 clean_nodes = collections.defaultdict(set) #key: time, value: nodes
                 clean_nodes[child.left_parent.time].add(child.left_parent.index)
                 clean_nodes[child.right_parent.time].add(child.right_parent.index)
-                valid = self.all_validity_check(clean_nodes, detach_snps, child)#thirs *arg fake
+                valid = self.all_validity_check(clean_nodes, detach_snps)
             if valid:
-                old_branch_length = self.arg.branch_length
-                old_anc_recomb = self.arg.num_ancestral_recomb
-                old_nonancestral_recomb = self.arg.num_nonancestral_recomb
-                #-- calc prior and likelihood and then M-H
                 new_log_lk = self.arg.log_likelihood(self.mu, self.data)
                 new_log_prior, new_roots, new_coals = self.arg.log_prior(self.n,
                                                 self.seq_length, self.r, self.Ne, True, True)
                 #--- reverse prob--
-                self.transition_prob.rem_choose_remParent(len(self.arg.rec), False)
+                self.transition_prob.rem_choose_remParent(len(self.original_ARG.rec)+2, False)
                 self.Metropolis_Hastings(new_log_lk, new_log_prior)
-                print("mh_accept ", self.accept)
+                if  self.verbose:
+                    print("mh_accept ", self.accept)
                 if self.accept:
                     #update coal, and rec
                     self.clean_up(self.coal_to_cleanup)
                     self.check_root_parents(new_roots)
                     self.arg.roots = new_roots # update roots
                     self.arg.coal = new_coals
+                    assert len(self.arg.rec) == len(self.original_ARG.rec)+2
                 else:
-                    assert old_anc_recomb + old_nonancestral_recomb + 1 ==\
-                        self.arg.num_nonancestral_recomb + self.arg.num_ancestral_recomb
-                    self.arg.branch_length = old_branch_length
-                    self.arg.num_ancestral_recomb = old_anc_recomb
-                    self.arg.num_nonancestral_recomb = old_nonancestral_recomb
-                    self.revert_add_recombination(child, followParent,
-                                                 detachParent, oldbreakpoint)
+                    self.arg= self.original_ARG
             else:
-                self.revert_add_recombination(child, followParent,
-                                                detachParent, oldbreakpoint)
+                self.arg = self.original_ARG
         self.empty_containers()
+
     #=========
     # adjust times move
 
@@ -1549,6 +1456,7 @@ class MCMC(object):
         modify the node times according to CwR
         also calculate the prior in place if calc_prior = true
         '''
+        # self.original_ARG = copy.deepcopy(self.arg)
         ordered_nodes = [v for k, v in sorted(self.arg.nodes.items(),
                                      key = lambda item: item[1].time)]
         number_of_lineages = self.n
@@ -1573,7 +1481,7 @@ class MCMC(object):
                           (node.left_child.left_parent.num_links() +
                            node.left_child.right_parent.num_links())
                 if calc_prior:
-                    log_prior -= rate * (t - prev_t)
+                    log_prior -= (rate * (t - prev_t))
                     log_prior += math.log(self.r)
                 number_of_links -= gap
                 number_of_lineages += 1
@@ -1582,9 +1490,10 @@ class MCMC(object):
                 original_t[counter] = node.time
                 node.time = t
                 if calc_prior:
-                    log_prior -= rate * (t - prev_t)
+                    log_prior -= (rate * (t - prev_t))
                     log_prior -=  math.log(2*self.Ne)
                 if node.first_segment == None:
+                    assert node.left_parent == None
                     node_numlink = 0
                     number_of_lineages -= 2
                     counter += 1
@@ -1600,11 +1509,15 @@ class MCMC(object):
         old_branch_length = self.arg.branch_length
         new_log_lk = self.arg.log_likelihood(self.mu, self.data)
         self.Metropolis_Hastings(new_log_lk, log_prior, trans_prob = False)
-        print("mh_accept ", self.accept)
+        if  self.verbose:
+            print("mh_accept ", self.accept)
         if not self.accept:
+            # self.arg = self.original_ARG
             self.arg.branch_length = old_branch_length
             self.revert_adjust_times(ordered_nodes, original_t)
         self.empty_containers()
+        ordered_nodes=[]
+        original_t=[]
 
     def revert_adjust_times(self, ordered_nodes, original_t):
         '''revert the proposed ARG by
@@ -1635,12 +1548,16 @@ class MCMC(object):
         5. compatibility/ validity check
         transition would only be for floatings
         '''
+        # self.original_ARG = copy.deepcopy(self.arg)#copy.deepcopy(self.arg)
+        self.arg.dump(path = self.outpath, file_name = 'arg.arg')
+        self.original_ARG =  self.arg.load(path = self.outpath+'/arg.arg')
         assert not self.arg.rec.is_empty()
         recparent = self.arg.__getitem__(random.choice(list(self.arg.rec.keys())))
         assert recparent.left_child.index == recparent.right_child.index
         child = recparent.left_child
         old_breakpoint = child.breakpoint
-        print("child is ", child.index)
+        if  self.verbose:
+            print("child is ", child.index)
         # TODO complete this
         leftparent = child.left_parent
         rightparent  = child.right_parent
@@ -1649,17 +1566,20 @@ class MCMC(object):
         child_head = child.first_segment
         child_tail = child.get_tail()
         new_breakpoint = random.choice(range(child_head.left + 1, child_tail.right))
-        print("old_breakpoint is",  child.breakpoint)
-        print("new_breakpoint:", new_breakpoint)
+        if  self.verbose:
+            print("old_breakpoint is",  child.breakpoint)
+            print("new_breakpoint:", new_breakpoint)
         y = self.find_break_seg(child_head, child.breakpoint)
-        if y.prev is not None:
+        if y.prev is not None  and self.verbose:
             print("x.right", y.prev.right)
-        print("y left", y.left, "y.right", y.right)
+        if  self.verbose:
+            print("y left", y.left, "y.right", y.right)
         if new_breakpoint == old_breakpoint or\
                 (not y.contains(old_breakpoint) and\
                  y.prev.right <= old_breakpoint<= y.left and\
                  y.prev.right <= new_breakpoint<= y.left):
-            print("new_breakpoint is still non ancestral and at the same interval")
+            if  self.verbose:
+                print("new_breakpoint is still non ancestral and at the same interval")
             # no prob changes, the breakpoint is still in the same non ancestral int
             child.breakpoint = new_breakpoint
             self.accept = True
@@ -1673,12 +1593,12 @@ class MCMC(object):
             # update ancestral material
             child.breakpoint = new_breakpoint
             self.update_all_ancestral_material([child])
-            print("self.floating", self.floatings)
             #reattach flaotings if any
             self.spr_reattach_floatings(child, child, child.time)#fake *args
             # is there any canceled rec?
             if self.NAM_recParent:
-                print("not valid due to removing rec")
+                if  self.verbose:
+                    print("not valid due to removing rec")
                 valid = False
             else: # check validity
                 # get the affected snps from [start, end) interval
@@ -1686,18 +1606,15 @@ class MCMC(object):
                 clean_nodes = collections.defaultdict(set) #key: time, value: nodes
                 clean_nodes[child.left_parent.time].add(child.left_parent.index)
                 clean_nodes[child.right_parent.time].add(child.right_parent.index)
-                valid = self.all_validity_check(clean_nodes, child_snps, child)#third *arg is fake
+                valid = self.all_validity_check(clean_nodes, child_snps)
             if valid:
-                #-- calc prior and likelihood and then M-H
-                old_branch_length = self.arg.branch_length
-                old_anc_recomb = self.arg.num_ancestral_recomb
-                old_nonancestral_recomb = self.arg.num_nonancestral_recomb
                 new_log_lk = self.arg.log_likelihood(self.mu, self.data)
                 new_log_prior, new_roots, new_coals = self.arg.log_prior(self.n,
                                                 self.seq_length, self.r, self.Ne, True, True)
                 #--- now mh
                 self.Metropolis_Hastings(new_log_lk, new_log_prior)
-                print("mh_accept ", self.accept)
+                if  self.verbose:
+                    print("mh_accept ", self.accept)
                 if self.accept:
                     #update coal, and rec
                     self.clean_up(self.coal_to_cleanup)
@@ -1705,15 +1622,11 @@ class MCMC(object):
                     self.arg.roots = new_roots # update roots
                     self.arg.coal = new_coals
                 else:#revert
-                    self.arg.branch_length = old_branch_length
-                    self.arg.num_ancestral_recomb = old_anc_recomb
-                    self.arg.num_nonancestral_recomb = old_nonancestral_recomb
-                    child.breakpoint = old_breakpoint
-                    self.update_all_ancestral_material([child], True)
+                    self.arg = self.original_ARG
             else:
-                child.breakpoint = old_breakpoint
-                self.update_all_ancestral_material([child], True)
+                self.arg = self.original_ARG
         self.empty_containers()
+
     #===================
     #transition 6 : Kuhner move
 
@@ -1818,12 +1731,13 @@ class MCMC(object):
             3. a rec on a floating lineage
         if passed_gmrca is True: we already passed the original GMRCA,
             so there is no upper_time and any time is acceptable. and the
-            events are 1. a coal between two floatings or a rec on a floating
+            events are 1. a coal between two floatings or a rec on a floating :)
         :return:
         '''
         assert len(self.floats) != 0 or self.active_links != 0
         assert self.floats.is_disjoint(self.active_nodes)
-        coalrate_bothF = (len(self.floats) * (len(self.floats) - 1)/2)/(2*self.Ne)
+        coalrate_bothF = (len(self.floats) * (len(self.floats) - 1))/(4*self.Ne)
+        # coalrate_bothF = (len(self.active_nodes) * (len(self.active_nodes)-1)/2)/(2*self.Ne)
         coalrate_1F1rest = (len(self.floats) * len(self.active_nodes))/(2*self.Ne)
         recrate = self.r * self.active_links
         totrate = coalrate_bothF + coalrate_1F1rest + recrate
@@ -1849,14 +1763,14 @@ class MCMC(object):
 
     def general_incompatibility_check(self,node,  S, s):
         '''
-        if the coalescence of child 1 and child 2 compatible for this snp.
+        whether the coalescence of child 1 and child 2 compatible for this snp.
         All are AVLTrees()
         this is applicable to Kuhner and initial
         S: is the parent samples for this segment
         s:  the focal SNP
         node: the parent node
         '''
-        ret = True
+        valid = True
         D = self.data[s]
         # symmetric difference between S1  and D
         A = S
@@ -1873,8 +1787,8 @@ class MCMC(object):
         else:#
             symD_A = D.difference(A)
             if len(symD_A) > 0: # incompatible
-                ret = False
-        return ret
+                valid = False
+        return valid
 
     def merge(self, leftchild, rightchild, parent = None):
         '''CA event between two lineages,
@@ -1989,21 +1903,27 @@ class MCMC(object):
         followparent.right_parent = oldrightparent
         oldleftparent.update_child(child, followparent)
         oldrightparent.update_child(child, followparent)
+        # assert (old_right <= floatParent.first_segment.left) or \
+        #        (floatParent.get_tail().right <= old_left)
         #update partial floating
         rphead = followparent.first_segment
         rptail = followparent.get_tail()
+        self.original_interval[followparent.index] = [old_left, old_right]
         self.add_to_partial_floating(followparent, old_left,
                 old_right, rphead.left, rptail.right)
         self.floats[floatParent.index] = floatParent.index
         # active links
-        diff = ch[2] - floatParent.num_links()
-        self.active_links -= diff
+        self.active_links -= ch[2]
+        self.active_links += floatParent.num_links()
+        # diff = ch[2] - floatParent.num_links()
+        # assert diff>=0
+        # self.active_links -= diff
         self.need_to_visit[floatParent.index] = floatParent.index
         self.need_to_visit[followparent.index] = followparent.index
         self.need_to_visit.discard(child.index)
         self.active_nodes.discard(child.index)
 
-    def new_recombination(self, t):
+    def depricated_new_recombination(self, t):
         '''
         The new event is a recomb at t
         1. choose a lineage to put the rec on from
@@ -2034,6 +1954,8 @@ class MCMC(object):
                 break_point = random.choice(range(head.left + 1,
                                                   tail.right))
                 leftparent, rightparent = self.split_node(child, break_point, t)
+                assert leftparent.get_tail().right <= break_point
+                assert break_point <= rightparent.first_segment.left
                 self.floats.discard(child_ind)
                 self.floats[leftparent.index] = leftparent.index
                 self.floats[rightparent.index] = rightparent.index
@@ -2057,39 +1979,340 @@ class MCMC(object):
                 oldleftparent = child.left_parent
                 oldrightparent = child.right_parent
                 oldbreakpoint = child.breakpoint
+                assert self.original_interval.__contains__(child.index)
+                old_interval = self.original_interval.pop(child.index)
+                old_left = old_interval[0]
+                old_right = old_interval[1]
                 if a != None and b != None:
+                    assert a == old_left and b == old_right
+                    assert ch[2] == (a - head.left) + (tail.right - b)
                     if bp < a - head.left:
                         # the left parent is floating
                         break_point = head.left + bp + 1
+                        assert break_point <= old_left or old_right <= break_point
                         assert head.left < break_point <= a
                         leftparent, rightparent = self.split_node(child, break_point, t)
+                        assert leftparent.get_tail().right <= break_point
+                        assert break_point <= rightparent.first_segment.left
                         self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-                                            leftparent, rightparent, a, b, ch)
+                                            leftparent, rightparent, old_left, old_right, ch)
                     else:
                         #right parent is floating
                         break_point = bp - (a- head.left) +b
                         assert b<= break_point < tail.right
+                        assert break_point <= old_left or old_right <= break_point
                         leftparent, rightparent = self.split_node(child, break_point, t)
+                        assert leftparent.get_tail().right <= break_point
+                        assert break_point <= rightparent.first_segment.left
                         self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-                                                rightparent, leftparent, a, b, ch)
+                                                rightparent, leftparent, old_left, old_right, ch)
                 elif a!= None:
                     break_point = head.left + bp + 1
+                    assert tail.right - head.left -1 == ch[2] or old_left- head.left == ch[2]
+                    assert break_point <= old_left or old_right <= break_point
                     # assert head.left < break_point <= a
                     leftparent, rightparent = self.split_node(child, break_point, t)
-                    self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-                       leftparent, rightparent, a, tail.right, ch)
+                    assert leftparent.get_tail().right <= break_point
+                    assert break_point <= rightparent.first_segment.left
+                    # choose which one to float
+                    if head.left< old_left and old_left< tail.right: # case 3 in notebook
+                        self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                           leftparent, rightparent, old_left, old_right, ch)
+                    elif (head.left < old_left and tail.right<= old_left) or \
+                            (old_right <= head.left and old_right < tail.right):# case 5, 8, 4, 7
+                        if random.random() < 0.5:# leftparent is floating
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                leftparent, rightparent, old_left, old_right, ch)
+                        else:#right parent is floating
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                rightparent, leftparent, old_left, old_right, ch)
+                    else:
+                        raise ValueError("the new interval violates the vaild cases")
                 elif b!= None:
                     #right parent is floating
+                    assert tail.right - old_right == ch[2]
                     break_point = bp + b
+                    assert break_point <= old_left or old_right <= break_point
                     assert b<= break_point < tail.right
                     leftparent, rightparent = self.split_node(child, break_point, t)
+                    assert leftparent.get_tail().right <= break_point
+                    assert break_point <= rightparent.first_segment.left
                     self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-                                rightparent, leftparent, head.left, b, ch)
+                                rightparent, leftparent, old_left, old_right, ch)
                 else:
                     raise ValueError("both a and b are None")
             else:
                 valid = False
         return valid
+
+    def new_recombination(self, t):
+        '''
+        New recombination in Kuhner move
+        1. choose a lineage to put the rec on from
+            self.floats and self.partial_floatings,
+            proportional to their num of links
+        2. if a floating is chosen, randomly choose a breakpoint
+                it and split to two and put both parents in self.floats
+            Else: it is from a partial floating,
+                choose a breakpoint randomly from the new sites (a', a), (b, b')
+                split the lineage to two. The parent with all new sites will
+                float and the other follows the child path.
+
+         10 sep 2020: in partially_floating the recomb parent is chosen
+            randomly to float, reghardless if the float parent's sites
+            are all new sites or a part of it are new sites.
+        The new event is a recomb at t
+        '''
+        valid = True
+        partial_links = [self.partial_floatings[item][2] for item in self.partial_floatings]
+        partial_keys = list(self.partial_floatings.keys())
+        float_keys = list(self.floats.keys())
+        float_links  = [self.arg.__getitem__(item).num_links() for item in float_keys]
+        partial_links.extend(float_links)
+        partial_keys.extend(float_keys)
+        assert sum(partial_links) == self.active_links
+        child_ind = random.choices(partial_keys, partial_links)[0]
+        if self.floats.__contains__(child_ind):
+            child = self.arg.__getitem__(child_ind)
+            # choose a breakpoint on child
+            head = child.first_segment
+            tail = child.get_tail()
+            if tail.right - head.left>1:
+                break_point = random.choice(range(head.left + 1,
+                                                  tail.right))
+                leftparent, rightparent = self.split_node(child, break_point, t)
+                assert leftparent.get_tail().right <= break_point
+                assert break_point <= rightparent.first_segment.left
+                self.floats.discard(child_ind)
+                self.floats[leftparent.index] = leftparent.index
+                self.floats[rightparent.index] = rightparent.index
+                self.need_to_visit.discard(child_ind)
+                self.need_to_visit[leftparent.index] = leftparent.index
+                self.need_to_visit[rightparent.index] = rightparent.index
+                self.active_links -= (child.num_links() - leftparent.num_links())
+                self.active_links += rightparent.num_links()
+            else:
+                valid = False
+        else: # rec on one of the partials
+            assert self.partial_floatings.__contains__(child_ind)
+            ch = self.partial_floatings.pop(child_ind)
+            if ch[2]>1:
+                bp = random.choice(range(ch[2]))
+                child = self.arg.__getitem__(child_ind)
+                head = child.first_segment
+                tail = child.get_tail()
+                a = ch[0]
+                b = ch[1]
+                oldleftparent = child.left_parent
+                oldrightparent = child.right_parent
+                oldbreakpoint = child.breakpoint
+                assert self.original_interval.__contains__(child.index)
+                old_interval = self.original_interval.pop(child.index)
+                old_left = old_interval[0]
+                old_right = old_interval[1]
+                if a != None and b != None:
+                    assert a == old_left and b == old_right
+                    assert ch[2] == (a - head.left) + (tail.right - b)
+                    if bp < a - head.left:
+                        # the left parent is floating
+                        break_point = head.left + bp + 1
+                        assert break_point <= old_left or old_right <= break_point
+                        assert head.left < break_point <= a
+                        leftparent, rightparent = self.split_node(child, break_point, t)
+                        assert leftparent.get_tail().right <= break_point
+                        assert break_point <= rightparent.first_segment.left
+                        # 10 sep2020: choose float parent randomly
+                        if random.random() < 0.5:# leftparent is floating
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                                leftparent, rightparent, old_left, old_right, ch)
+                        else:#rightparent is floating
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                                 rightparent,leftparent, old_left, old_right, ch)
+                    else:
+                        #right parent is floating
+                        break_point = bp - (a- head.left) +b
+                        assert b<= break_point < tail.right
+                        assert break_point <= old_left or old_right <= break_point
+                        leftparent, rightparent = self.split_node(child, break_point, t)
+                        assert leftparent.get_tail().right <= break_point
+                        assert break_point <= rightparent.first_segment.left
+                        # 10 sep2020: choose float parent randomly
+                        if random.random() < 0.5:# leftparent is floating
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                                leftparent, rightparent, old_left, old_right, ch)
+                        else:
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                                 rightparent,leftparent, old_left, old_right, ch)
+                elif a!= None:
+                    break_point = head.left + bp + 1
+                    assert tail.right - head.left -1 == ch[2] or old_left- head.left == ch[2]
+                    assert break_point <= old_left or old_right <= break_point
+                    # assert head.left < break_point <= a
+                    leftparent, rightparent = self.split_node(child, break_point, t)
+                    assert leftparent.get_tail().right <= break_point
+                    assert break_point <= rightparent.first_segment.left
+                    # choose which one to float
+                    if (head.left< old_left and old_left< tail.right):# case 3 in notebook
+                        # 10 sep2020: choose float parent randomly
+                        if random.random() < 0.5:# leftparent is floating
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                                leftparent, rightparent, old_left, old_right, ch)
+                        else:
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                                 rightparent,leftparent, old_left, old_right, ch)
+                    elif (head.left < old_left and tail.right<= old_left) or \
+                            (old_right <= head.left and old_right < tail.right):# case 5, 8, 4, 7
+                        if random.random() < 0.5:# leftparent is floating
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                leftparent, rightparent, old_left, old_right, ch)
+                        else:#right parent is floating
+                            self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                rightparent, leftparent, old_left, old_right, ch)
+                    else:
+                        raise ValueError("the new interval violates the vaild cases")
+                elif b!= None:
+                    #right parent is floating
+                    assert tail.right - old_right == ch[2]
+                    break_point = bp + b
+                    assert break_point <= old_left or old_right <= break_point
+                    assert b<= break_point < tail.right
+                    leftparent, rightparent = self.split_node(child, break_point, t)
+                    assert leftparent.get_tail().right <= break_point
+                    assert break_point <= rightparent.first_segment.left
+                    # 10 sep2020: choose float parent randomly
+                    if random.random() < 0.5:# leftparent is floating
+                        self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                            leftparent, rightparent, old_left, old_right, ch)
+                    else:
+                        self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+                                             rightparent,leftparent, old_left, old_right, ch)
+                else:
+                    raise ValueError("both a and b are None")
+            else:
+                valid = False
+        return valid
+
+    # def new_recombination1(self, t):
+    #     '''
+    #     The new event is a recomb at t
+    #     1. choose a lineage to put the rec on from
+    #         self.floats and self.partial_floatings,
+    #         proportional to their num of links
+    #     2. if a floating is chosen, randomly choose a breakpoint
+    #             it and split to two and put both parents in self.floats
+    #         Else: it is from a partial floating,
+    #             choose a breakpoint randomly from the new sites (a', a), (b, b')
+    #             split the lineage to two. The parent with all new sites will
+    #             float and the other follows the child path.
+    #     '''
+    #     valid = True
+    #     partial_links = [self.partial_floatings[item][2] for item in self.partial_floatings]
+    #     partial_keys = list(self.partial_floatings.keys())
+    #     float_keys = list(self.floats.keys())
+    #     float_links  = [self.arg.__getitem__(item).num_links() for item in float_keys]
+    #     partial_links.extend(float_links)
+    #     partial_keys.extend(float_keys)
+    #     assert sum(partial_links) == self.active_links
+    #     child_ind = random.choices(partial_keys, partial_links)[0]
+    #     if self.floats.__contains__(child_ind):
+    #         child = self.arg.__getitem__(child_ind)
+    #         # choose a breakpoint on child
+    #         head = child.first_segment
+    #         tail = child.get_tail()
+    #         if tail.right - head.left>1:
+    #             break_point = random.choice(range(head.left + 1,
+    #                                               tail.right))
+    #             leftparent, rightparent = self.split_node(child, break_point, t)
+    #             assert leftparent.get_tail().right <= break_point
+    #             assert break_point <= rightparent.first_segment.left
+    #             self.floats.discard(child_ind)
+    #             self.floats[leftparent.index] = leftparent.index
+    #             self.floats[rightparent.index] = rightparent.index
+    #             self.need_to_visit.discard(child_ind)
+    #             self.need_to_visit[leftparent.index] = leftparent.index
+    #             self.need_to_visit[rightparent.index] = rightparent.index
+    #             self.active_links -= (child.num_links() - leftparent.num_links())
+    #             self.active_links += rightparent.num_links()
+    #         else:
+    #             valid = False
+    #     else: # rec on one of the partials
+    #         assert self.partial_floatings.__contains__(child_ind)
+    #         ch = self.partial_floatings.pop(child_ind)
+    #         if ch[2]>1:
+    #             bp = random.choice(range(ch[2]))
+    #             child = self.arg.__getitem__(child_ind)
+    #             head = child.first_segment
+    #             tail = child.get_tail()
+    #             a = ch[0]
+    #             b = ch[1]
+    #             oldleftparent = child.left_parent
+    #             oldrightparent = child.right_parent
+    #             oldbreakpoint = child.breakpoint
+    #             assert self.original_interval.__contains__(child.index)
+    #             old_interval = self.original_interval.pop(child.index)
+    #             old_left = old_interval[0]
+    #             old_right = old_interval[1]
+    #             if a != None and b != None:
+    #                 assert a == old_left and b == old_right
+    #                 assert ch[2] == (a - head.left) + (tail.right - b)
+    #                 if bp < a - head.left:
+    #                     # the left parent is floating
+    #                     break_point = head.left + bp + 1
+    #                     assert break_point <= old_left or old_right <= break_point
+    #                     assert head.left < break_point <= a
+    #                     leftparent, rightparent = self.split_node(child, break_point, t)
+    #                     assert leftparent.get_tail().right <= break_point
+    #                     assert break_point <= rightparent.first_segment.left
+    #                     self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+    #                                         leftparent, rightparent, old_left, old_right, ch)
+    #                 else:
+    #                     #right parent is floating
+    #                     break_point = bp - (a- head.left) +b
+    #                     assert b<= break_point < tail.right
+    #                     assert break_point <= old_left or old_right <= break_point
+    #                     leftparent, rightparent = self.split_node(child, break_point, t)
+    #                     assert leftparent.get_tail().right <= break_point
+    #                     assert break_point <= rightparent.first_segment.left
+    #                     self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+    #                                             rightparent, leftparent, old_left, old_right, ch)
+    #             elif a!= None:
+    #                 break_point = head.left + bp + 1
+    #                 assert tail.right - head.left -1 == ch[2] or old_left- head.left == ch[2]
+    #                 assert break_point <= old_left or old_right <= break_point
+    #                 # assert head.left < break_point <= a
+    #                 leftparent, rightparent = self.split_node(child, break_point, t)
+    #                 assert leftparent.get_tail().right <= break_point
+    #                 assert break_point <= rightparent.first_segment.left
+    #                 # choose which one to float
+    #                 if head.left< old_left and old_left< tail.right: # case 3 in notebook
+    #                     self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+    #                        leftparent, rightparent, old_left, old_right, ch)
+    #                 elif (head.left < old_left and tail.right<= old_left) or \
+    #                         (old_right <= head.left and old_right < tail.right):# case 5, 8, 4, 7
+    #                     if random.random() < 0.5:# leftparent is floating
+    #                         self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+    #                             leftparent, rightparent, old_left, old_right, ch)
+    #                     else:#right parent is floating
+    #                         self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+    #                             rightparent, leftparent, old_left, old_right, ch)
+    #                 else:
+    #                     raise ValueError("the new interval violates the vaild cases")
+    #             elif b!= None:
+    #                 #right parent is floating
+    #                 assert tail.right - old_right == ch[2]
+    #                 break_point = bp + b
+    #                 assert break_point <= old_left or old_right <= break_point
+    #                 assert b<= break_point < tail.right
+    #                 leftparent, rightparent = self.split_node(child, break_point, t)
+    #                 assert leftparent.get_tail().right <= break_point
+    #                 assert break_point <= rightparent.first_segment.left
+    #                 self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
+    #                             rightparent, leftparent, old_left, old_right, ch)
+    #             else:
+    #                 raise ValueError("both a and b are None")
+    #         else:
+    #             valid = False
+    #     return valid
 
     def coal_bothF(self, t):
         '''
@@ -2111,10 +2334,10 @@ class MCMC(object):
             if parent.first_segment != None:
                 self.floats[parent.index] = parent.index
                 self.need_to_visit[parent.index] = parent.index
-                self.active_links -= leftchild.num_links() +\
-                                     rightchild.num_links() - parent.num_links()
+                self.active_links -= (leftchild.num_links() + rightchild.num_links())
+                self.active_links += parent.num_links()
             else:
-                self.active_links -= leftchild.num_links() + rightchild.num_links()
+                self.active_links -= (leftchild.num_links() + rightchild.num_links())
             self.floats.discard(inds[0])
             self.floats.discard(inds[1])
             self.need_to_visit.discard(inds[0])
@@ -2130,12 +2353,20 @@ class MCMC(object):
         valid = True
         active_ind = random.choice(list(self.active_nodes))
         float_ind = random.choice(list(self.floats))
-        print("CA1F", "floats:", float_ind, "reattaches to", active_ind)
+        if  self.verbose:
+            print("CA1F", "floats:", float_ind, "reattaches to", active_ind)
         activenode = self.arg.__getitem__(active_ind)
         floatnode = self.arg.__getitem__(float_ind)
         #--- start
-        active_head = activenode.first_segment
-        active_tail = activenode.get_tail()
+        if self.original_interval.__contains__(activenode.index):
+            old_interval = self.original_interval.pop(activenode.index)
+            old_left = old_interval[0]
+            old_right = old_interval[1]
+        else:
+            old_left = activenode.first_segment.left
+            old_right = activenode.get_tail().right
+            assert self.original_ARG.__getitem__(activenode.index).first_segment.left == old_left
+            assert self.original_ARG.__getitem__(activenode.index).get_tail().right == old_right
         float_head = floatnode.first_segment
         float_tail = floatnode.get_tail()
         oldleftparent = activenode.left_parent
@@ -2151,52 +2382,28 @@ class MCMC(object):
             parent.right_parent = oldrightparent
             oldleftparent.update_child(activenode, parent)
             oldrightparent.update_child(activenode, parent)
-            if parent.first_segment!= None:
+            if parent.first_segment != None:
                 parent_head = parent.first_segment
                 parent_tail = parent.get_tail()
                 if parent.left_parent == None: #future floating
                     self.floats[parent.index] = parent.index
-                    self.active_links -= float_tail.right - float_head.left -1
                     self.active_links += parent_tail.right - parent_head.left-1
-                    if self.partial_floatings.__contains__(active_ind):
-                        assert self.partial_floatings[active_ind][2] > 0
-                        self.active_links -= self.partial_floatings[active_ind][2]
-                        del self.partial_floatings[active_ind]
-                elif not self.partial_floatings.__contains__(active_ind):
-                    self.add_to_partial_floating(parent, active_head.left,
-                                active_tail.right, parent_head.left, parent_tail.right)
-                    self.active_links -= float_tail.right - float_head.left -1
-                else: # active_ind in partial floating
-                    ch = self.partial_floatings.pop(active_ind)
-                    if ch[0] != None and ch[1] != None:
-                        self.add_to_partial_floating(parent, ch[0],
-                                ch[1], parent_head.left, parent_tail.right)
-                    elif ch[0] == None and ch[1] != None:
-                        self.add_to_partial_floating(parent, active_head.left,
-                                ch[1], parent_head.left, parent_tail.right)
-                    elif ch[0] != None and ch[1] == None:
-                        self.add_to_partial_floating(parent, ch[0],
-                                active_tail.right, parent_head.left, parent_tail.right)
-                    else:
-                        raise ValueError("both ch[0] and ch[1] are None, not a partial float")
-                    self.active_links -= float_tail.right - float_head.left -1
-                    self.active_links -= ch[2]
+                else:
+                    self.original_interval[parent.index] = [old_left, old_right]
+                    self.add_to_partial_floating(parent, old_left,
+                                old_right, parent_head.left, parent_tail.right)
                 self.need_to_visit[parent.index] = parent.index
             elif parent.left_parent != None:
                 # delete its parent--> same way we did for prune
-                self.update_prune_parents(parent)
+                # self.update_prune_parents(parent)
+                self.set_nodechild_to_None(parent)
                 self.need_to_visit.discard(parent.index)
-                self.active_links -= float_tail.right - float_head.left -1
-                if self.partial_floatings.__contains__(active_ind):
-                    assert self.partial_floatings[active_ind][2] > 0
-                    self.active_links -= self.partial_floatings[active_ind][2]
-                    del self.partial_floatings[active_ind]
-            else:# root
-                self.active_links -= float_tail.right - float_head.left -1
-                if self.partial_floatings.__contains__(active_ind):
-                    assert self.partial_floatings[active_ind][2] > 0
-                    self.active_links -= self.partial_floatings[active_ind][2]
-                    del self.partial_floatings[active_ind]
+            # else:# root
+            self.active_links -= float_tail.right - float_head.left -1
+            if self.partial_floatings.__contains__(active_ind):
+                assert self.partial_floatings[active_ind][2] > 0
+                ch = self.partial_floatings.pop(active_ind)
+                self.active_links -= ch[2]
             self.active_nodes.discard(active_ind)
             self.floats.discard(float_ind)
             self.need_to_visit.discard(active_ind)
@@ -2264,7 +2471,7 @@ class MCMC(object):
         return left_parent, right_parent
 
     def add_to_partial_floating(self,node, old_left,
-                                old_right,new_left, new_right):
+                                old_right, new_left, new_right):
         '''check and add the node to partial floating'''
         assert node.first_segment is not None
         if node.left_parent is None:
@@ -2276,32 +2483,33 @@ class MCMC(object):
             a = None
             b = None
             new_links = 0
-            if new_left < old_left and new_right > old_left:
-                if new_right <= old_right:
+            if (new_left < old_left) and (new_right > old_left):# cases 1, 3
+                if new_right <= old_right:# case 1
                     a = old_left
                     new_links += old_left - new_left
-                else:
+                else:# 3
                     a = old_left
-                    b= old_right
+                    b = old_right
                     new_links += (old_left - new_left) + (new_right - old_right)
-            elif new_left < old_left  and new_right <= old_left:
+            elif (new_left < old_left)  and (new_right <= old_left):# 5, 8
                 new_links += new_right - new_left - 1
                 if new_links > 0:
-                    a= new_left
-            elif new_left >= old_left and new_left< old_right:
-                if new_right > old_right:
+                    a = new_left
+            elif (new_left >= old_left) and (new_left< old_right):# 2, 6
+                if new_right > old_right: # 2
                     b = old_right
                     new_links += new_right - old_right
-            elif new_left >= old_left and new_left >= old_right:
+            elif (new_left >= old_left) and (new_left >= old_right):# 4, 7
                 new_links += new_right - new_left -1
                 if new_links > 0:
-                    a= new_left
-            if a != None or b != None:
+                    a = new_left
+            if (a != None) or (b != None):
                 self.partial_floatings[node.index] = [a, b, new_links]
                 self.active_links += new_links
             self.active_nodes[node.index] = node.index
 
-    def check_material(self, leftchild, rightchild, leftparent, rightparent):
+    def check_material(self, leftchild, rightchild,
+                       leftparent, rightparent):
         '''
          for a alredy existing event, update the ancestral material
          this is for kuhner move, the cases with no event between a time interval
@@ -2314,91 +2522,131 @@ class MCMC(object):
             oldleftparent_right = leftparent.get_tail().right
             oldrightparent_left = rightparent.first_segment.left
             oldrightparent_right = rightparent.get_tail().right
+            assert oldleftparent_left ==\
+                   self.original_ARG.__getitem__(leftparent.index).first_segment.left
+            assert oldleftparent_right ==\
+                   self.original_ARG.__getitem__(leftparent.index).get_tail().right
+            assert oldrightparent_left ==\
+                   self.original_ARG.__getitem__(rightparent.index).first_segment.left
+            assert oldrightparent_right ==\
+                   self.original_ARG.__getitem__(rightparent.index).get_tail().right
             leftparent, rightparent = self.split_node_kuhner(child, leftparent, rightparent)
+            if self.partial_floatings.__contains__(child.index):
+                    self.active_links -= self.partial_floatings.pop(child.index)[2]
             if leftparent.first_segment != None and\
                     rightparent.first_segment != None:
-                if self.partial_floatings.__contains__(child.index):
-                    leftparent_head = leftparent.first_segment
-                    leftparent_tail = leftparent.get_tail()
-                    rightparent_head = rightparent.first_segment
-                    rightparent_tail = rightparent.get_tail()
-                    self.add_to_partial_floating(leftparent, oldleftparent_left,
-                                    oldleftparent_right,leftparent_head.left, leftparent_tail.right)
-                    self.add_to_partial_floating(rightparent, oldrightparent_left,
-                                    oldrightparent_right,rightparent_head.left, rightparent_tail.right)
-                    ch = self.partial_floatings.pop(child.index)
-                    self.active_links -= ch[2]
-                elif leftparent.left_parent != None and rightparent.left_parent != None:
-                    self.active_nodes[leftparent.index] = leftparent.index
-                    self.active_nodes[rightparent.index] = rightparent.index
-                elif leftparent.left_parent != None:# right parent was future floating
-                    assert not self.floats.__contains__(rightparent.index)
-                    self.floats[rightparent.index] = rightparent.index
-                    self.active_links += rightparent.num_links()
-                    self.active_nodes[leftparent.index] = leftparent.index
-                elif rightparent.left_parent != None:
-                    assert not self.floats.__contains__(leftparent.index)
-                    self.floats[leftparent.index] = leftparent.index
-                    self.active_links += leftparent.num_links()
-                    self.active_nodes[rightparent.index] = rightparent.index
-                else:# both are None
-                    self.floats[leftparent.index] = leftparent.index
-                    self.active_links += leftparent.num_links()
-                    self.floats[rightparent.index] = rightparent.index
-                    self.active_links += rightparent.num_links()
+                leftparent_head = leftparent.first_segment
+                leftparent_tail = leftparent.get_tail()
+                rightparent_head = rightparent.first_segment
+                rightparent_tail = rightparent.get_tail()
+                assert leftparent_tail.right <= rightparent_head.left
+                self.add_to_partial_floating(leftparent, oldleftparent_left,
+                                oldleftparent_right,leftparent_head.left, leftparent_tail.right)
+                self.original_interval[leftparent.index] = [oldleftparent_left, oldleftparent_right]
+                self.add_to_partial_floating(rightparent, oldrightparent_left,
+                                oldrightparent_right,rightparent_head.left, rightparent_tail.right)
+                self.original_interval[rightparent.index] = [oldrightparent_left, oldrightparent_right]
+                assert leftparent.left_parent != None
+                assert rightparent.left_parent != None
+                self.active_nodes[leftparent.index] = leftparent.index
+                self.active_nodes[rightparent.index] = rightparent.index
+                # elif leftparent.left_parent != None and rightparent.left_parent != None:
+                #     self.active_nodes[leftparent.index] = leftparent.index
+                #     self.active_nodes[rightparent.index] = rightparent.index
+                # elif leftparent.left_parent != None:# right parent was future floating
+                #     assert not self.floats.__contains__(rightparent.index)
+                #     self.floats[rightparent.index] = rightparent.index
+                #     self.active_links += rightparent.num_links()
+                #     self.active_nodes[leftparent.index] = leftparent.index
+                # elif rightparent.left_parent != None:
+                #     assert not self.floats.__contains__(leftparent.index)
+                #     self.floats[leftparent.index] = leftparent.index
+                #     self.active_links += leftparent.num_links()
+                #     self.active_nodes[rightparent.index] = rightparent.index
+                # else:# both are None
+                #     self.floats[leftparent.index] = leftparent.index
+                #     self.active_links += leftparent.num_links()
+                #     self.floats[rightparent.index] = rightparent.index
+                #     self.active_links += rightparent.num_links()
                 self.need_to_visit[leftparent.index] = leftparent.index
                 self.need_to_visit[rightparent.index] = rightparent.index
                 self.need_to_visit.discard(child.index)
                 self.active_nodes.discard(child.index)
-            elif leftparent.first_segment != None:
-                child.left_parent = leftparent.left_parent
-                child.right_parent = leftparent.right_parent
-                child.breakpoint = leftparent.breakpoint
-                parent = leftparent.left_parent
-                if parent is None:
-                    #child will be floating
-                    self.floats[child.index] = child.index
-                    self.active_links += child.num_links()
-                    self.active_nodes.discard(child.index)
-                    if self.partial_floatings.__contains__(child.index):
-                        ch = self.partial_floatings.pop(child.index)
-                        self.active_links -= ch[2]
-                    assert self.need_to_visit.__contains__(child.index)
-                else:
-                    parent.update_child(leftparent, child)
-                    parent = leftparent.right_parent
-                    parent.update_child(leftparent, child)
+            elif leftparent.first_segment != None and rightparent.first_segment == None:
+                assert leftparent.left_parent != None
+                leftparent.reconnect(child)
+                leftparent_head = leftparent.first_segment
+                leftparent_tail = leftparent.get_tail()
+                assert leftparent_head.left == child.first_segment.left
+                assert leftparent_tail.right == child.get_tail().right
+                self.add_to_partial_floating(child, oldleftparent_left,
+                                oldleftparent_right,leftparent_head.left, leftparent_tail.right)
+                self.original_interval[child.index] = [oldleftparent_left, oldleftparent_right]
+                # child.left_parent = leftparent.left_parent
+                # child.right_parent = leftparent.right_parent
+                # child.breakpoint = leftparent.breakpoint
+                # parent = leftparent.left_parent
+                # if parent is None:
+                #     #child will be floating
+                #     self.floats[child.index] = child.index
+                #     self.active_links += child.num_links()
+                #     self.active_nodes.discard(child.index)
+                #     if self.partial_floatings.__contains__(child.index):
+                #         ch = self.partial_floatings.pop(child.index)
+                #         self.active_links -= ch[2]
+                #     assert self.need_to_visit.__contains__(child.index)
+                # else:
+                #     parent.update_child(leftparent, child)
+                #     parent = leftparent.right_parent
+                #     parent.update_child(leftparent, child)
                     # child stays active and if in partial-->stays same
+                self.set_nodechild_to_None(rightparent)
                 del self.arg.nodes[leftparent.index]
                 del self.arg.nodes[rightparent.index]
-                self.update_prune_parents(rightparent)
+                # self.update_prune_parents(rightparent)
                 #parents might alredy added to need_to_visit
                 self.need_to_visit.discard(rightparent.index)
                 self.need_to_visit.discard(leftparent.index)
-            elif rightparent.first_segment != None:
-                child.left_parent = rightparent.left_parent
-                child.right_parent = rightparent.right_parent
-                child.breakpoint = rightparent.breakpoint
-                parent = rightparent.left_parent
-                if parent is None:
-                    #child will be floating
-                    self.floats[child.index] = child.index
-                    self.active_links += child.num_links()
-                    self.active_nodes.discard(child.index)
-                    if self.partial_floatings.__contains__(child.index):
-                        ch = self.partial_floatings.pop(child.index)
-                        self.active_links -= ch[2]
-                    assert self.need_to_visit.__contains__(child.index)
-                else:
-                    parent.update_child(rightparent, child)
-                    parent = rightparent.right_parent
-                    parent.update_child(rightparent, child)
-                    # child stays active
+            elif rightparent.first_segment != None and leftparent.first_segment == None:
+                assert rightparent.left_parent != None
+                rightparent.reconnect(child)
+                rightparent_head = rightparent.first_segment
+                rightparent_tail = rightparent.get_tail()
+                assert rightparent_head.left == child.first_segment.left
+                assert rightparent_tail.right == child.get_tail().right
+                self.add_to_partial_floating(child, oldrightparent_left,
+                                oldrightparent_right,rightparent_head.left, rightparent_tail.right)
+                self.original_interval[child.index] = [oldrightparent_left, oldrightparent_right]
+                self.set_nodechild_to_None(leftparent)
                 del self.arg.nodes[leftparent.index]
                 del self.arg.nodes[rightparent.index]
-                self.update_prune_parents(leftparent)
-                self.need_to_visit.discard(leftparent.index)
+                # self.update_prune_parents(rightparent)
+                #parents might alredy added to need_to_visit
                 self.need_to_visit.discard(rightparent.index)
+                self.need_to_visit.discard(leftparent.index)
+                # child.left_parent = rightparent.left_parent
+                # child.right_parent = rightparent.right_parent
+                # child.breakpoint = rightparent.breakpoint
+                # parent = rightparent.left_parent
+                # if parent is None:
+                #     #child will be floating
+                #     self.floats[child.index] = child.index
+                #     self.active_links += child.num_links()
+                #     self.active_nodes.discard(child.index)
+                #     if self.partial_floatings.__contains__(child.index):
+                #         ch = self.partial_floatings.pop(child.index)
+                #         self.active_links -= ch[2]
+                #     assert self.need_to_visit.__contains__(child.index)
+                # else:
+                #     parent.update_child(rightparent, child)
+                #     parent = rightparent.right_parent
+                #     parent.update_child(rightparent, child)
+                #     # child stays active
+                # del self.arg.nodes[leftparent.index]
+                # del self.arg.nodes[rightparent.index]
+                # self.update_prune_parents(leftparent)
+                # self.need_to_visit.discard(leftparent.index)
+                # self.need_to_visit.discard(rightparent.index)
             else: # both None
                 raise ValueError("at least one parent must have segment")
         else: #coal
@@ -2407,9 +2655,13 @@ class MCMC(object):
             if parent.first_segment != None:
                 oldparent_left = parent.first_segment.left
                 oldparent_right = parent.get_tail().right
+                assert oldparent_left ==\
+                        self.original_ARG.__getitem__(parent.index).first_segment.left
+                assert oldparent_right ==\
+                       self.original_ARG.__getitem__(parent.index).get_tail().right
             else:
-                oldparent_left= None
-                oldparent_right= None
+                oldparent_left = None
+                oldparent_right = None
             valid, parent = self.merge(leftchild, rightchild, parent)
             if valid:
                 if parent.first_segment!= None:
@@ -2423,10 +2675,14 @@ class MCMC(object):
                         assert oldparent_right != None
                         self.add_to_partial_floating(parent, oldparent_left, oldparent_right,
                                                      parent_head.left, parent_tail.right)
+                        self.original_interval[parent.index] = [oldparent_left, oldparent_right]
                     self.need_to_visit[parent.index] = parent.index
                 elif parent.left_parent != None:
-                    self.update_prune_parents(parent)
+                    #this is new root
+                    # self.update_prune_parents(parent)
+                    self.set_nodechild_to_None(parent)
                     self.need_to_visit.discard(parent.index)
+                    # del self.arg.nodes[parent.index]
                 else:# parent is root
                     self.need_to_visit.discard(parent.index) # might have been added for future float
                 #----
@@ -2442,12 +2698,36 @@ class MCMC(object):
                 self.need_to_visit.discard(rightchild.index)
         return valid
 
+    def set_nodechild_to_None(self, child):
+        '''
+        For NAM or pruned nodes:
+        set the parent.child of node_child to None.
+        Also, set the child.parent to None'''
+        if child.left_parent != None:
+            if child.left_parent.left_child != None:
+                if child.left_parent.left_child.index == child.index:
+                    child.left_parent.left_child = None
+            if child.left_parent.right_child != None:
+                if child.left_parent.right_child.index == child.index:
+                    child.left_parent.right_child = None
+            if child.right_parent.left_child != None:
+                if child.right_parent.left_child.index == child.index:
+                    child.right_parent.left_child = None
+            if child.right_parent.right_child != None:
+                if child.right_parent.right_child.index == child.index:
+                    child.right_parent.right_child = None
+            self.need_to_visit[child.left_parent.index] = child.left_parent.index
+            self.need_to_visit[child.right_parent.index] = child.right_parent.index
+            child.left_parent = None
+            child.right_parent = None
+            child.breakpoint = None
+
     def kuhner(self):
         '''
-        1.randomly choose a lineage otherthan the root,
+        1.randomly choose a lineage other than the root,
             a.put it in need_check, floats
         2. find all the time and nodes greater than prune.time
-        3. find mutations need to be check in future
+        3. find mutations need to be checked in future
         4. if prune is a child of CA:
             a) detach prune
             b)remove P
@@ -2455,17 +2735,24 @@ class MCMC(object):
             d) if P root, put C in future floating
             else: prune parents, and all the further parents
         '''
-        # self.print_state()
         #---- forward transition
+        self.arg.dump(path = self.outpath, file_name = 'arg.arg')
+        self.original_ARG =  self.arg.load(path = self.outpath+'/arg.arg')
+        # self.original_ARG = self.arg.copy()
+        # self.original_ARG = copy.deepcopy(self.arg)#copy.deepcopy(self.arg)
+
         self.transition_prob.kuhner_num_nodes(self.arg.__len__() - len(self.arg.roots))
         valid = True
         prune = self.add_choose_child()
-        print("prune is ", prune.index)
+        if  self.verbose:
+            print("prune is ", prune.index)
         assert prune.left_parent != None
         self.floats[prune.index] = prune.index
         self.need_to_visit[prune.index] = prune.index
+        self.need_to_visit[prune.left_parent.index] = prune.left_parent.index
         self.find_active_nodes(prune.time)# 2
-        self.update_prune_parents(prune)# 4
+        # self.update_prune_parents(prune)# 4
+        self.set_nodechild_to_None(prune)
         self.get_active_links()# active links
         self.active_nodes = self.active_nodes.difference(self.floats)
         lower_time = prune.time
@@ -2480,7 +2767,8 @@ class MCMC(object):
                     new_event = False
                 if new_event:
                     new_time = new_event[1]; newevent_type = new_event[0]
-                    print("new event type", newevent_type, "at time", new_time)
+                    if self.verbose:
+                        print("new event type", newevent_type, "at time", new_time)
                     valid = self.apply_new_event(newevent_type, new_time)
                     lower_time = new_time
                     if not valid:
@@ -2492,68 +2780,128 @@ class MCMC(object):
                         parent1 = self.arg.__getitem__(parent_indexes.pop())
                         parent2 = self.arg.__getitem__(parent_indexes.pop())
                         assert parent1.index != parent2.index
-                        assert parent1.left_child.index == parent1.right_child.index
-                        child = parent1.left_child
-                        leftparent = child.left_parent
-                        rightparent = child.right_parent
-                        if self.need_to_visit.__contains__(child.index):
-                            valid = self.check_material(child, child, leftparent, rightparent)
-                            if not valid:
-                                break
-                        else:
-                            self.active_nodes.discard(child.index)
-                            assert leftparent.first_segment != None
-                            assert rightparent.first_segment != None
-                            assert not self.partial_floatings.__contains__(child.index)
-                            if leftparent.left_parent == None: # future floating
-                                assert self.need_to_visit.__contains__(leftparent.index)
-                                self.floats[leftparent.index] = leftparent.index
-                                self.active_links += leftparent.num_links()
+                        assert parent1.left_parent != None
+                        assert parent2.left_parent != None
+                        if parent1.left_child != None:#
+                            assert parent1.left_child.index == parent1.right_child.index
+                            child = parent1.left_child
+                            leftparent = child.left_parent
+                            rightparent = child.right_parent
+                            if self.need_to_visit.__contains__(child.index):
+                                valid = self.check_material(child, child, leftparent, rightparent)
+                                if not valid:
+                                    break
                             else:
+                                self.active_nodes.discard(child.index)
+                                assert leftparent.first_segment != None
+                                assert rightparent.first_segment != None
+                                assert not self.partial_floatings.__contains__(child.index)
+                                assert not self.original_interval.__contains__(child.index)
                                 self.active_nodes[leftparent.index] = leftparent.index
-                            if rightparent.left_parent == None:# future floating
-                                assert self.need_to_visit.__contains__(rightparent.index)
-                                self.floats[rightparent.index] = rightparent.index
-                                self.active_links += rightparent.num_links()
-                            else:
                                 self.active_nodes[rightparent.index] = rightparent.index
+                        else: # child is NAM or pruned
+                            self.set_nodechild_to_None(parent1)
+                            self.set_nodechild_to_None(parent2)
+                            self.need_to_visit.discard(parent1.index)
+                            self.need_to_visit.discard(parent2.index)
+                            del self.arg.nodes[parent1.index]
+                            del self.arg.nodes[parent2.index]
                     else: # coal
                         parent = self.arg.__getitem__(parent_indexes.pop())
                         assert len(parent_indexes) == 0
                         leftchild = parent.left_child
                         rightchild = parent.right_child
-                        assert leftchild.index != rightchild.index
-                        if self.need_to_visit.__contains__(leftchild.index) or\
-                            self.need_to_visit.__contains__(rightchild.index):
-                            valid = self.check_material(leftchild, rightchild, parent, parent)
-                            if not valid:
-                                break
-                        else:
-                            assert not self.partial_floatings.__contains__(leftchild.index)
-                            assert not self.partial_floatings.__contains__(rightchild.index)
-                            self.active_nodes.discard(leftchild.index)
-                            self.active_nodes.discard(rightchild.index)
-                            if parent.left_parent != None:
-                                assert parent.first_segment != None
-                                self.active_nodes[parent.index] = parent.index
-                            elif parent.first_segment != None:
-                                #it is a future floating
-                                assert self.need_to_visit.__contains__(parent.index)
-                                self.floats[parent.index] = parent.index
-                                self.active_links += parent.num_links()
-                            else:# might have been added to check future floating
+                        if leftchild != None and rightchild != None:
+                            assert leftchild.index != rightchild.index
+                            assert leftchild.first_segment != None
+                            assert rightchild.first_segment != None
+                            if self.need_to_visit.__contains__(leftchild.index) or\
+                                self.need_to_visit.__contains__(rightchild.index):
+                                valid = self.check_material(leftchild, rightchild, parent, parent)
+                                if not valid:
+                                    break
+                            else:
+                                assert not self.partial_floatings.__contains__(leftchild.index)
+                                assert not self.partial_floatings.__contains__(rightchild.index)
+                                assert not self.original_interval.__contains__(leftchild.index)
+                                assert not self.original_interval.__contains__(rightchild.index)
+                                self.active_nodes.discard(leftchild.index)
+                                self.active_nodes.discard(rightchild.index)
+                                if parent.left_parent != None:
+                                    assert parent.first_segment != None
+                                    self.active_nodes[parent.index] = parent.index
+                                elif parent.first_segment != None:
+                                    #it is a future floating
+                                    assert self.need_to_visit.__contains__(parent.index)
+                                    self.floats[parent.index] = parent.index
+                                    self.active_links += parent.num_links()
+                                else:# might have been added to check future floating
+                                    self.need_to_visit.discard(parent.index)
+                        elif leftchild == None and rightchild != None:
+                            assert rightchild.first_segment != None
+                            if self.partial_floatings.__contains__(rightchild.index):#B
+                                self.active_links -= self.partial_floatings.pop(rightchild.index)[2]
+                            if parent.left_parent == None:#
+                                self.floats[rightchild.index] = rightchild.index
+                                self.active_links += rightchild.num_links()
+                                self.active_nodes.discard(rightchild.index)
+                                self.need_to_visit[rightchild.index] = rightchild.index
+                            else:
+                                self.original_interval[rightchild.index] = [parent.first_segment.left,
+                                                                            parent.get_tail().right]
+                                self.add_to_partial_floating(rightchild,parent.first_segment.left,
+                                        parent.get_tail().right, rightchild.first_segment.left,
+                                                             rightchild.get_tail().right)
+                                parent.reconnect(rightchild)
+                                self.need_to_visit[rightchild.index] = rightchild.index
+                                assert self.active_nodes.__contains__(rightchild.index)
+                            self.need_to_visit.discard(parent.index)
+                            del self.arg.nodes[parent.index]
+                        elif leftchild != None and rightchild == None:
+                            assert leftchild.first_segment != None
+                            if self.partial_floatings.__contains__(leftchild.index):#B
+                                self.active_links -= self.partial_floatings.pop(leftchild.index)[2]
+                            if parent.left_parent == None:#
+                                self.floats[leftchild.index] = leftchild.index
+                                self.active_links += leftchild.num_links()
+                                self.active_nodes.discard(leftchild.index)
+                                self.need_to_visit[leftchild.index] = leftchild.index
+                            else:
+                                self.original_interval[leftchild.index] = [parent.first_segment.left,
+                                                                           parent.get_tail().right]
+                                self.add_to_partial_floating(leftchild, parent.first_segment.left,
+                                        parent.get_tail().right, leftchild.first_segment.left,
+                                                             leftchild.get_tail().right)
+                                parent.reconnect(leftchild)
+                                self.need_to_visit[leftchild.index] = leftchild.index
+                                assert self.active_nodes.__contains__(leftchild.index)
+                            self.need_to_visit.discard(parent.index)
+                            del self.arg.nodes[parent.index]
+                        else: # both children are None
+                            if parent.left_parent == None:#
                                 self.need_to_visit.discard(parent.index)
+                                del self.arg.nodes[parent.index]
+                            else:
+                                self.set_nodechild_to_None(parent)
+                                self.need_to_visit.discard(parent.index)
+                                del self.arg.nodes[parent.index]
+                            # check for paritial floating
                     lower_time = upper_time
             else: #passed gmrca
-                assert len(self.floats) >1
+                if self.verbose:
+                    print("PASSED GMRCA")
+                assert len(self.floats) > 1
                 assert self.active_nodes.is_empty()
                 new_event = self.new_event_time(lower_time, passed_gmrca=True)
                 new_time = new_event[1]; newevent_type = new_event[0]
+                if self.verbose:
+                    print("new event type", newevent_type, "at time", new_time)
                 valid = self.apply_new_event(newevent_type, new_time)
                 lower_time = new_time
                 if not valid:
                     break
-        print("valid is", valid)
+        if  self.verbose:
+            print("valid is", valid)
         if valid:
             assert self.floats.is_empty()
             assert self.active_links == 0
@@ -2563,24 +2911,89 @@ class MCMC(object):
             #----
             new_log_lk = self.arg.log_likelihood(self.mu, self.data)
             new_log_prior, new_roots, new_coals = self.arg.log_prior(self.n,
-                                            self.seq_length, self.r, self.Ne, False, True, True)
+                                            self.seq_length, self.r, self.Ne,
+                                            False, True, True)
             #--- reverse transition
             self.transition_prob.kuhner_num_nodes(self.arg.__len__() - len(new_roots), False)
             self.Metropolis_Hastings(new_log_lk, new_log_prior, trans_prob = False, kuhner =True)
             if self.accept:
-                print("accepted")
+                if  self.verbose:
+                    print("Kuhner MH accepted")
                 self.arg.roots = new_roots
                 self.arg.coal = new_coals
+            else:
+                self.arg = self.original_ARG
+        else:
+            self.arg = self.original_ARG
         self.floats.clear()
         self.need_to_visit.clear()
         self.active_nodes.clear()
         self.active_links = 0
         self.partial_floatings = collections.defaultdict(list)
         self.higher_times = collections.defaultdict(set)#time: (index)
-        self.transition_prob.log_prob_forward = 0
-        self.transition_prob.log_prob_reverse = 0
-        self.arg.nextname = max(self.arg.nodes) + 1
-        self.arg.get_available_names()
+        self.original_interval = collections.defaultdict(list)
+        self.empty_containers()
+        self.original_ARG = ARG()
+        # gc.collect()
+
+    #============= transition 7: update parameters
+    def random_normal(self,  mean, sd):
+        '''non negative random number from normal distribution'''
+        v = np.random.normal(mean, sd, 1)[0]
+        if v < 0:
+            v = -v
+        return v
+
+    def normal_log_pdf(self, mean, sd, x):
+        var = float(sd)**2
+        denom = (2*math.pi*var)**0.5
+        num = math.exp((-(float(x)-float(mean))**2)/(2*var))
+        return math.log(num/denom)
+
+    def update_parameters(self, mu= False, r = False, Ne= False):
+        sd_mu = self.default_mutation_rate/4
+        sd_r = self.default_recombination_rate/4
+        sd_N  = 5
+        N0 = self.default_Ne
+        # propose mu
+        new_mu = self.mu
+        new_r= self.r
+        new_N = self.Ne
+        if mu:
+            new_mu = self.random_normal(self.mu, sd_mu)
+        if r:
+            new_r = self.random_normal(self.r, sd_r)
+        if Ne:
+            new_N = self.random_normal(self.Ne, sd_N)
+        new_log_lk = self.arg.log_likelihood(new_mu, self.data)
+        new_log_prior = self.arg.log_prior(self.n,
+                               self.seq_length, new_r, new_N, False)
+        #------- MH
+        self.accept = False
+        ratio = new_log_lk + new_log_prior + \
+                self.normal_log_pdf(new_r, sd_r, self.r)+\
+                self.normal_log_pdf(new_mu, sd_mu, self.mu)+\
+                self.normal_log_pdf(new_N, sd_N, self.Ne)+\
+                self.transition_prob.log_prob_reverse - \
+                (self.log_lk + self.log_prior +
+                 self.transition_prob.log_prob_forward +\
+                 self.normal_log_pdf(self.r, sd_r, new_r)+\
+                self.normal_log_pdf(self.mu, sd_mu, new_mu)+\
+                self.normal_log_pdf(self.Ne, sd_N, new_N))
+        if  self.verbose:
+            print("forward_prob:", self.transition_prob.log_prob_forward)
+            print("reverse_prob:", self.transition_prob.log_prob_reverse)
+            print("ratio:", ratio)
+            print("new_log_lk", new_log_lk, "new_log_prior", new_log_prior)
+            print("old.log_lk", self.log_lk,"old.log_prior", self.log_prior)
+
+        if math.log(random.random()) <= ratio: # accept
+            self.log_lk = new_log_lk
+            self.log_prior = new_log_prior
+            self.accept = True
+            self.mu = new_mu
+            self.r = new_r
+            self.Ne = new_N
 
     def write_summary(self, row = [], write = False):
         '''
@@ -2593,13 +3006,14 @@ class MCMC(object):
             self.summary.loc[0 if math.isnan(self.summary.index.max())\
                 else self.summary.index.max() + 1] = row
         else:
-            self.summary.to_hdf(self.outpath+ "/summary.h5", key = "df")
+            self.summary.to_hdf(self.outpath + "/summary.h5", key = "df")
 
-    def run_transition(self, w = [1, 1, 1, 2, 1, 3]):
+    def run_transition(self, w):
         '''
         choose a transition move proportional to the given weights (w)
         Note that order is important:
-        orders: "spr", "remove", "add", "at"(adjust_times), "ab" (breakpoint), kuhner
+        orders: "spr", "remove", "add", "at"(adjust_times), "ab" (breakpoint),
+            kuhner, update__mu, update_rho, update_Ne
         NOTE: if rem and add weights are not equal, we must include
                 that in the transition probabilities
         '''
@@ -2608,40 +3022,47 @@ class MCMC(object):
             w[4] = 0# adjust breakpoint
         ind = random.choices([i for i in range(len(w))], w)[0]
         if ind == 0:
-            print("------spr")
+            # print("------spr")
             self.spr()
         elif ind == 1:
-            print("-----remove")
+            # print("-----remove")
             self.remove_recombination()
         elif ind == 2:
-            print("---------add")
+            # print("---------add")
             self.add_recombination()
         elif ind == 3:
+            # print("---------adjust_times")
             self.adjust_times()
         elif ind == 4:
-            print("---------adjust breakpoint")
+            # print("---------adjust breakpoint")
             self.adjust_breakpoint()
         elif ind == 5:#kuhner
-            original_ARG = copy.deepcopy(self.arg)
+            # print("---------kuhner")
             self.kuhner()
-            if not self.accept:
-                self.arg = original_ARG
-                print("rejected")
+        elif ind == 6:
+            # print("---------update_parameters")
+            self.update_parameters(True, True, False)
+        # elif ind == 7:
+        #     print("---------update_rho")
+        #     self.update_parameters(r=True)
+        # elif ind == 8:
+        #     print("---------update_Ne")
+        #     self.update_parameters(Ne=True)
         self.detail_acceptance[ind][0] += 1
         if self.accept:
             self.detail_acceptance[ind][1] += 1
 
-    def run(self, iteration = 20, thin = 1, burn = 0, verify = True):
+    def run(self, iteration = 20, thin= 1, burn= 0,
+            verify = False):
         it = 0
         accepted = 0
         t0 = time.time()
         #---test #1 for no division by zero
-        self.detail_acceptance = {i:[1, 0] for i in range(6)}
+        self.detail_acceptance = {i:[1, 0] for i in range(9)}
         #----test
-        # for it in tqdm(range(iteration)):
-        while it < iteration:
-            print("iteration ~~~~~", it)
-            self.run_transition()
+        for it in tqdm(range(iteration), ncols=100, ascii=False):#
+        # while it < iteration:
+            self.run_transition(w = [0, 1, 1, 6, 1, 6, 0])#[1, 1, 1, 5, 1, 4, 0][0, 1, 1, 6, 1, 6, 0]
             if self.accept:
                 accepted += 1
             if it > burn and it % thin == 0:
@@ -2649,14 +3070,16 @@ class MCMC(object):
                                     self.log_lk + self.log_prior,
                                 self.arg.num_ancestral_recomb,
                                 self.arg.num_nonancestral_recomb,
-                                self.arg.branch_length, -1])
+                                self.arg.branch_length,
+                                    self.mu, self.r, self.Ne, -1])
                 #dump arg
+                self.arg.dump(self.outpath,file_name="arg"+str(int(it))+".arg")
             if verify:
                 self.arg.verify()
             it += 1
             self.accept = False
-        if iteration > 15:
-            self.summary.setup[0:17] = [iteration, thin, burn, self.n, self.seq_length,
+        if iteration > 18:
+            self.summary.setup[0:18] = [iteration, thin, burn, self.n, self.seq_length,
                                        self.m, self.Ne, self.mu, self.r,
                                         round(accepted/iteration, 2), round((time.time() - t0), 2),
                                         round(self.detail_acceptance[0][1]/self.detail_acceptance[0][0], 2),
@@ -2664,7 +3087,8 @@ class MCMC(object):
                                         round(self.detail_acceptance[2][1]/self.detail_acceptance[2][0], 2),
                                         round(self.detail_acceptance[3][1]/self.detail_acceptance[3][0], 2),
                                         round(self.detail_acceptance[4][1]/self.detail_acceptance[4][0], 2),
-                                        round(self.detail_acceptance[5][1]/self.detail_acceptance[5][0], 2)]
+                                        round(self.detail_acceptance[5][1]/self.detail_acceptance[5][0], 2),
+                                        round(self.detail_acceptance[6][1]/self.detail_acceptance[6][0], 2)]
             self.write_summary(write = True)
         print("detail acceptance", self.detail_acceptance)
 
@@ -2672,13 +3096,13 @@ class MCMC(object):
         print("self.arg.coal", self.arg.coal)
         print("self.arg.rec", self.arg.rec)
         print("self.arg.roots", self.arg.roots)
+        print("self.floatins", self.floatings)
         print("node", "time", "left", "right", "l_chi", "r_chi", "l_par", "r_par",
               "l_bp", "snps", "fir_seg_sam",
               sep="\t")
         for j in self.arg.nodes:
             node = self.arg.__getitem__(j)
             if node.left_parent is not None or node.left_child is not None:
-
                 s = node.first_segment
                 if s is None:
                     print(j, "%.5f" % node.time, "root", "root",
@@ -2712,7 +3136,4 @@ class MCMC(object):
 if __name__ == "__main__":
     pass
     mcmc = MCMC()
-    mcmc.run(10000, 20, 2000)
-
-
-
+    mcmc.run(200, 1, 0, verify=False)

@@ -1,9 +1,12 @@
 ''' This module is responsible for ARG classes'''
+import collections
 import math
 from sortedcontainers import SortedSet
+from sortedcontainers import SortedList
 import bintrees
 import pickle
-
+import numpy as np
+import pandas as pd
 
 class Segment(object):
 
@@ -30,6 +33,17 @@ class Segment(object):
     def __lt__(self, other):
         return ((self.left, self.right)
                 < (other.left, other.right))
+
+    def copy(self):
+        ''':return a copy of this segment'''
+        s = Segment()
+        s.left = self.left
+        s.right = self.right
+        s.node = self.node
+        s.samples = self.samples
+        s.next = self.next
+        s.prev = self.prev
+        return s
 
     def contains(self, x):
         return x >= self.left and x < self.right
@@ -148,6 +162,27 @@ class Node(object):
         self.breakpoint = None
         self.index = index
 
+    def copy(self):
+        '''a copy of the node'''
+        cpy_node = Node(self.index)
+        s = self.first_segment
+        if s is not None:
+            x = s.copy()
+            cpy_node.first_segment = x
+            x.node = cpy_node
+            x = x.next
+            while x is not None:
+                s = x.copy()
+                s.prev.next = s
+                x.node = cpy_node
+                x = x.next
+        else:
+            cpy_node.first_segment = None
+        cpy_node.time = self.time
+        cpy_node.breakpoint = self.breakpoint
+        cpy_node.snps = self.snps.copy()
+        return cpy_node
+
     def contains(self, x):
         seg = self.first_segment
         while seg is not None:
@@ -222,7 +257,6 @@ class Node(object):
             if self.left_parent.contains(x) + self.right_parent.contains(x) != 1:
                 print("in upward_path x is", x, "left_aprent", self.left_parent.index,
                       "right parent",self.right_parent.index, "node", self.index)
-
             assert self.left_parent.contains(x) + self.right_parent.contains(x) == 1
             block = False
             if self.left_parent.contains(x):
@@ -239,18 +273,24 @@ class Node(object):
                 block = False
                 return self.left_parent, block
 
-    def tree_node_age(self, x):
+    def tree_node_age(self, x, return_parent_time= False):
         '''
         the tree branch length of
         node self, at position x
+        :param x the site
+        :param return_parent_time: if we only want to
+            report parent time ---> in the case of alelle age
          '''
         node = self
         child_time = node.time
         block = False
         while not block:
             node, block = node.upward_path(x)
-        assert node.time - child_time >= 0
-        return node.time - child_time
+        assert node.time - child_time > 0
+        if not return_parent_time:
+            return node.time - child_time
+        else:
+            return node.time
 
     def sibling(self):
         '''
@@ -314,16 +354,35 @@ class Node(object):
 
     def update_child(self, oldchild, newchild):
         '''update self child from oldchild to newchild'''
-        if self.left_child.index == oldchild.index:
-            self.left_child = newchild
-        if self.right_child.index == oldchild.index:
-            self.right_child = newchild
+        if self.left_child != None:
+            if self.left_child.index == oldchild.index:
+                self.left_child = newchild
+        if self.right_child != None:
+            if self.right_child.index == oldchild.index:
+                self.right_child = newchild
+
+    def reconnect(self, child):# BUG7
+        '''from child--> self--> parent: TO child ---> parent '''
+        leftparent = self.left_parent
+        rightparent = self.right_parent
+        child.left_parent = leftparent
+        child.right_parent = rightparent
+        child.breakpoint = self.breakpoint
+        leftparent.update_child(self, child)
+        rightparent.update_child(self, child)
+
+    def is_invisible_recomb(self):
+        '''self is a recomb child, check if the recomb is invisible'''
+        if self.left_parent.left_parent.index == \
+                self.right_parent.left_parent.index:# invisible
+            return True
+        else:
+            return False
 
 class ARG(object):
     '''
     Ancestral Recombination Graph
     '''
-
     def __init__(self):
         self.nodes = {}
         self.roots = bintrees.AVLTree()# root indexes
@@ -356,6 +415,30 @@ class ARG(object):
         '''if ARG contains node key '''
         return index in self.nodes
 
+    def copy(self):
+        '''return a copy of the ARG'''
+        arg = ARG()
+        for node in self.nodes.values():
+            arg.nodes[node.index] = node.copy()
+        # connect nodes
+        for node in self.nodes.values():
+            node2 = arg.__getitem__(node.index)
+            if node.left_child != None:
+                node2.left_child = arg.__getitem__(node.left_child.index)
+                node2.right_child = arg.__getitem__(node.right_child.index)
+            if node.left_parent != None:
+                node2.left_parent = arg.__getitem__(node.left_parent.index)
+                node2.right_parent = arg.__getitem__(node.right_parent.index)
+        arg.roots = self.roots.copy()# root indexes
+        arg.rec = self.rec.copy()# arg rec parents nodes
+        arg.coal = self.coal.copy() # arg CA parent node
+        arg.num_ancestral_recomb = self.num_ancestral_recomb
+        arg.num_nonancestral_recomb = self.num_nonancestral_recomb
+        arg.branch_length = self.branch_length
+        arg.nextname = self.nextname # next node index
+        arg.available_names = self.available_names.copy()
+        return arg
+
     def equal(self, other):
         '''if self is equal with other (structural equality)
         TODO : complete this'''
@@ -368,6 +451,61 @@ class ARG(object):
                 if not node.equal(other[node.index]):
                     return False
             return True
+
+    def leaves(self, node=None):
+        """
+        Iterates over the leaves of the ARG.
+        """
+        if node is None:
+            for node in self.nodes.values():
+                if node.left_child == None:
+                    yield node
+        else:
+            for node in self.preorder(node):
+                if node.left_child == None:
+                    yield node
+
+    def preorder(self, node=None):
+        """
+        Iterates through nodes in preorder traversal.
+        """
+        visit = set()
+        if node is None:
+            node = self.__getitem__(self.roots.max_key())
+        queue = [node]
+        for node in queue:
+            if node in visit:
+                continue
+            yield node
+            visit.add(node)
+            if node.left_child != None:
+                queue.append(node.left_child)
+                if node.left_child.index != node.right_child.index:
+                    queue.append(node.right_child)
+
+    def postorder(self, node=None):
+        """
+        Iterates through nodes in postorder traversal.
+        """
+        visit = collections.defaultdict(lambda: 0)
+        queue = list(self.leaves(node))
+
+        for node in queue:
+            yield node
+            if node.left_parent!= None:
+                visit[node.left_parent] +=1
+                if node.left_parent.left_child.index != node.left_parent.right_child.index:
+                    num_child = 2
+                else:
+                    num_child =1
+                # if all child has been visited then queue parent
+                if visit[node.left_parent] == num_child:
+                    queue.append(node.left_parent)
+                if node.right_parent.index != node.left_parent.index:
+                    visit[node.right_parent] +=1
+                    # if all child has been visited then queue parent
+                    if visit[node.right_parent] == num_child:
+                        queue.append(node.right_parent)
 
     def set_roots(self):
         self.roots.clear()
@@ -390,7 +528,6 @@ class ARG(object):
 
     #==========================
     # node manipulation
-
     def alloc_segment(self, left = None, right = None, node = None,
                       samples = bintrees.AVLTree(), prev = None, next = None):
         """
@@ -506,7 +643,6 @@ class ARG(object):
                     total_material += ((seg.right - seg.left)* age)
                     seg = seg.next
         return total_material
-
     #=======================
     #spr related
 
@@ -514,7 +650,7 @@ class ARG(object):
         '''
         Detaches a specified coalescence node from the rest of the ARG
         '''
-        print("Detach()",node.index, "sib", sib.index, "p",node.left_parent.index)
+        # print("Detach()",node.index, "sib", sib.index, "p",node.left_parent.index)
         assert node.left_parent.index == node.right_parent.index
         parent = node.left_parent
         sib.left_parent = parent.left_parent
@@ -616,17 +752,79 @@ class ARG(object):
         '''
         node = self.__getitem__(0)
         block = False
-
         while not block:
             node, block = self.find_tmrca(node, x)
         return node.time
 
-    @property
-    def breakpoints(self):
-        br = bintrees.AVLTree()
+    def total_tmrca(self, sequence_length):
+        '''return the tmrca of all the sites in the ARG'''
+        break_points = self.breakpoints(only_ancRec= True, set= True)
+        break_points.add(0)
+        break_points.add(sequence_length)
+        tot_tmrca = np.zeros(int(sequence_length))
+        count =0
+        while count < len(break_points)-1:
+            x_tmrca= self.tmrca(break_points[count])
+            tot_tmrca[int(break_points[count]):int(break_points[count+1])] = x_tmrca
+            count +=1
+        return tot_tmrca
+
+    def allele_age(self):
+        ''':return a pd df with four columns:
+            1. site: the genomic position of the SNP
+            2. recent age: the most recent age for the allele
+            3. mid age: the midpoint of node age and its parent (tree node) time
+            4. latest age: the latest time (back in time) for the mutation
+            The df is sorted based on site.
+         '''
+        #find the nodes with mutations
+        snp_nodes = [] # nodes with len(snps) > 0
         for node in self.nodes.values():
-            if node.breakpoint != None:
-                br[node.breakpoint] = node.breakpoint
+            if node.snps:
+                snp_nodes.append(node)
+        # now for each node and find age for each mut
+        age_df = pd.DataFrame(columns=["site", "recent age", "mid age", "latest age"])
+        for node in snp_nodes:
+            # num_branches = collections.defaultdict(list)
+            node_time = node.time
+            for x in node.snps:
+                parent_age = node.tree_node_age(x, return_parent_time=True)
+                age_df.loc[age_df.shape[0]] =[x, node_time,
+                                              (node_time+parent_age)/2, parent_age]
+        age_df.sort_values(by=['site'], ascending=True, inplace=True)
+        age_df.reset_index(inplace=True, drop=True)
+        return age_df
+
+    def invisible_recombs(self):
+        '''return the proportion of invisible recombs '''
+        invis_count=0
+        for node in self.nodes.values():
+            if node.breakpoint != None and node.is_invisible_recomb():
+                invis_count +=1
+        return invis_count/(self.num_ancestral_recomb+self.num_nonancestral_recomb)
+    #@property
+
+    def breakpoints(self, only_ancRec= False, set= True):
+        '''
+        :param only_ancRec: only ancestral rec with repetition
+        :param set: if set, only uqique posittions are returned
+        :param invisible count the number of invisible recombs
+        :return: either a list/set of all recombs
+            or a list of anc rec that has repetition
+        '''
+        if set:
+            br = SortedSet()
+        else:
+            br = SortedList()
+        if not only_ancRec:
+            for node in self.nodes.values():
+                if node.breakpoint != None:
+                    br.add(node.breakpoint)
+        else:
+            for node in self.nodes.values():
+                if node.breakpoint != None and\
+                        node.contains(node.breakpoint):#ancestral
+                    br.add(node.breakpoint)
         return br
 
     #========== probabilites
@@ -648,6 +846,7 @@ class ARG(object):
                 assert node.left_parent != None
                 age = node.left_parent.time - node.time
                 seg = node.first_segment
+                assert seg.prev == None
                 while seg is not None:
                     total_material += ((seg.right - seg.left)* age)
                     seg = seg.next
@@ -655,7 +854,7 @@ class ARG(object):
                     number_of_mutations += len(node.snps)
                     snp_nodes.append(node)
         self.branch_length = total_material
-        print("number_of_mutations", number_of_mutations, "m", len(data))
+        # print("number_of_mutations", number_of_mutations, "m", len(data))
         assert number_of_mutations == len(data) # num of snps
         if mutation_rate == 0:
             if number_of_mutations == 0:
@@ -667,6 +866,7 @@ class ARG(object):
                 (total_material * mutation_rate)
         # now calc prob of having this particular mutation pattern
         for node in snp_nodes:
+            # num_branches = collections.defaultdict(list)
             for x in node.snps:
                 potential_branch_length = node.tree_node_age(x)
                 ret += math.log(potential_branch_length / total_material)
@@ -676,7 +876,8 @@ class ARG(object):
 
     def log_prior(self, sample_size, sequence_length, recombination_rate, Ne,
                   NAM = True, new_roots = False , kuhner = False):
-        '''probability of the ARG under coalescen with recombination
+        '''
+        probability of the ARG under coalescen with recombination
         this is after a move and before clean up. then there might be some
          extra NAM lineages, we ignore them.
          :param NAM: no-ancestral material node. If NAm node is allowed. note after spr and
@@ -703,7 +904,7 @@ class ARG(object):
         self.num_nonancestral_recomb = 0
         while counter < number_of_nodes:
             node = ordered_nodes[counter]
-            assert node.time >= time # make sure it is ordered
+            assert node.time >= time # make sure it is ordered]
             rate = (number_of_lineages * (number_of_lineages - 1)
                     / (4*Ne)) + (number_of_links * (recombination_rate))
             # ret -= rate * (node.time - time)
@@ -765,9 +966,8 @@ class ARG(object):
         with open(output, "wb") as file:
             pickle.dump(self, file)
 
-    def load(self, path = ' ', file_name = 'arg.arg'):
-        output = path + "/" + file_name
-        with open(output, "rb") as file:
+    def load(self, path = ' '):
+        with open(path, "rb") as file:
             return pickle.load(file)
 
     def verify(self):
@@ -784,9 +984,9 @@ class ARG(object):
         '''
         for node in self.nodes.values():
             assert self.nodes[node.index].index == node.index
-            if node.left_parent is None:# roots
+            if node.left_parent is None: #roots
                 if node.first_segment is not None:
-                    print("iv verrify node is ", node.index)
+                    print("in verrify node is ", node.index)
                     self.print_state()
                 assert node.first_segment == None
                 assert node.index in self.roots
@@ -798,6 +998,8 @@ class ARG(object):
                 assert node.time > node.right_child.time
             else: # rest
                 assert node.first_segment != None
+                assert node.first_segment.prev == None
+                assert node.get_tail().next == None
                 assert node.index not in self.roots
                 assert node.left_parent.time > node.time
                 if node.left_child is None: #leaves
@@ -844,7 +1046,6 @@ class ARG(object):
         for j in self.nodes:
             node = self.__getitem__(j)
             if node.left_parent is not None or node.left_child is not None:
-
                 s = node.first_segment
                 if s is None:
                     print(j, "%.5f" % node.time, "root", "root",
@@ -876,7 +1077,7 @@ class ARG(object):
                               node.snps, s.samples, sep="\t")
                     s = s.next
 
-#====== verificatio
+#====== verification
 
 def verify_mutation_node(node, data):
     '''
@@ -892,4 +1093,3 @@ def verify_mutation_node(node, data):
             assert node.left_child.contains(x) and node.right_child.contains(x)
         node_samples = node.x_segment(x).samples
         assert sorted(node_samples) == sorted(data[x])
-

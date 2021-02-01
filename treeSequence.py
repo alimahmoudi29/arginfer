@@ -227,7 +227,7 @@ class TreeSeq(object):
             self.arg.roots[node.index] = node.index
 
     def map_mutation(self):
-        '''returns a list of mutation positions where where the index
+        '''returns a list of mutation positions  where the index
         is the node on which the mutation took place
         '''
         mutation_map = [[] for _ in range(self.ts_full.num_nodes)]
@@ -282,24 +282,49 @@ def get_ts_genotype(ts_full):
 
 def get_arg_genotype(ts_full):
     '''
-    get the genotyped from ts and store in a dict where keys
+    get the genotypes from ts and implements a discretising function,
+     which  rounds upwards to the nearest int, and store in a dict where keys
     are SNP positions and values are the sequences for which
-    the allele is derived.
+    the allele is derived. ANDing if the results if 2 or more variants end up at the same
+    integer position.
     '''
+    simple_ts = ts_full.simplify()
+    new_data = {}
     derived = 1
-    ts_data = get_ts_genotype(ts_full)
-    # print(ts_data)
-    snp_positions = ts_full.tables.sites.position
-    new_data = {}#collections.defaultdict(list)
-    for ind in range(len(ts_data)):
-        if math.ceil(snp_positions[ind]) in new_data:
-            raise NameError("Not two SNPs can have identical genomic position")
+    genotypes = None
+    position = 0
+    for v in simple_ts.variants():
+        if int(math.ceil(v.position)) != position:
+            genotypes = v.genotypes
+            position = int(math.ceil(v.position))
         else:
-            b = bintrees.AVLTree()
-            b.update({k: k for k in list(np.where(ts_data[ind] == derived)[0])})
-            new_data[math.ceil(snp_positions[ind])] = b
-                #(np.where(ts_data[ind] == derived)[0])#list(np.where(ts_data[ind] == derived)[0]) # derived
+            raise NameError("Not two SNPs can have identical genomic position")
+            # genotypes = np.logical_and(genotypes, v.genotypes)
+        b = bintrees.AVLTree()
+        b.update({k: k for k in list(np.where(genotypes == derived)[0])})
+        new_data[math.ceil(position)] = b
     return new_data
+
+# def get_arg_genotype(ts_full):
+#     '''
+#     get the genotyped from ts and store in a dict where keys
+#     are SNP positions and values are the sequences for which
+#     the allele is derived.
+#     '''
+#     derived = 1
+#     ts_data = get_ts_genotype(ts_full)
+#     # print(ts_data)
+#     snp_positions = ts_full.tables.sites.position
+#     new_data = {}#collections.defaultdict(list)
+#     for ind in range(len(ts_data)):
+#         if math.ceil(snp_positions[ind]) in new_data:
+#             raise NameError("Not two SNPs can have identical genomic position")
+#         else:
+#             b = bintrees.AVLTree()
+#             b.update({k: k for k in list(np.where(ts_data[ind] == derived)[0])})
+#             new_data[math.ceil(snp_positions[ind])] = b
+#                 #(np.where(ts_data[ind] == derived)[0])#list(np.where(ts_data[ind] == derived)[0]) # derived
+#     return new_data
 
 def test_run():
     recombination_rate=1e-8
@@ -316,6 +341,7 @@ def test_run():
 
 if __name__ == "__main__":
     test_run()
+
 
 
 

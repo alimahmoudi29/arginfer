@@ -6,6 +6,8 @@ import os
 import argbook
 import treeSequence
 import bintrees
+import mcmc as MC
+import time
 
 class TestSegment(unittest.TestCase):
 
@@ -309,6 +311,24 @@ class TestTreeSeq(unittest.TestCase):
 
 class TestARG(unittest.TestCase):
 
+    def test_arg_leaves(self):
+        recombination_rate=1e-8
+        Ne= 5000
+        sample_size = 5
+        length = 6e2
+        ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
+                            recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
+        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg.ts_to_argnode()
+        arg = tsarg.arg
+        manual_leaves = [i for i in  range(sample_size)]
+        leaves = list(arg.leaves(arg.__getitem__(arg.roots.max_key())))
+        get_leaves =[]
+        for node in leaves:
+            get_leaves.append(node.index)
+        self.assertTrue(sorted(get_leaves) == sorted(manual_leaves), True)
+
+
     def test_log_likelihood(self):
         recombination_rate=1e-8
         Ne= 5000
@@ -501,8 +521,7 @@ class TestARG(unittest.TestCase):
         argnode = tsarg.arg
         argnode.dump(path = os.getcwd(),
                      file_name = 'pickle_out.arg')
-        loaded_arg = argbook.ARG().load(path = os.getcwd(),
-                                     file_name = 'pickle_out.arg')
+        loaded_arg = argbook.ARG().load(path = os.getcwd()+'/pickle_out.arg')
         for key in loaded_arg.nodes:
             self.assertEqual(argnode[key].index, loaded_arg[key].index)
             self.assertEqual(sorted(argnode[key].snps), sorted(loaded_arg[key].snps))
@@ -530,6 +549,63 @@ class TestARG(unittest.TestCase):
                 self.assertEqual(argnode[key].left_child, loaded_arg[key].left_child)
                 self.assertEqual(argnode[key].right_child, loaded_arg[key].right_child)
             self.assertEqual(argnode[key].breakpoint, loaded_arg[key].breakpoint)
+
+    def test_arg_copy_and_equal(self):
+        recombination_rate=1e-8
+        Ne= 5000
+        sample_size = 5
+        length = 6e2
+        ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
+                            recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
+
+        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg.ts_to_argnode()
+        arg = tsarg.arg
+        arg_copy= arg.copy()
+        self.assertTrue(arg.equal(arg_copy), True)
+        self.assertFalse(arg==arg_copy, False)
+
+    def test_arg_total_tmrca(self):
+        recombination_rate=1e-8
+        Ne= 5000
+        sample_size = 5
+        length = 6e2
+        ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
+                            recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
+        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg.ts_to_argnode()
+        arg = tsarg.arg
+        tot_tmrca= arg.total_tmrca(length)
+        # print(tot_tmrca)
+
+    def test_arg_allele_age(self):
+        recombination_rate=1e-8
+        Ne= 5000
+        sample_size = 5
+        length = 6e4
+        ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne,
+                                   length = length, mutation_rate = 1e-8,
+                            recombination_rate = recombination_rate,
+                                   random_seed = 20, record_full_arg = True)
+        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg.ts_to_argnode()
+        arg = tsarg.arg
+        allele_age= arg.allele_age()
+
+    def test_arg_breakpoints(self):
+        recombination_rate=1e-8
+        Ne= 5000
+        sample_size = 5
+        length = 6e4
+        ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne,
+                                   length = length, mutation_rate = 1e-8,
+                            recombination_rate = recombination_rate,
+                                   random_seed = 20, record_full_arg = True)
+        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg.ts_to_argnode()
+        arg = tsarg.arg
+        all_recomb_events = arg.breakpoints()
+        ancestral_recomb_events = arg.breakpoints(only_ancRec= True)
 
 
 class TestMCMC(unittest.TestCase):
@@ -588,7 +664,7 @@ class TestMCMC(unittest.TestCase):
         arg.nodes[5].left_parent = arg.nodes[7]; arg.nodes[5].right_parent = arg.nodes[7]
         arg.nodes[6].left_parent = arg.nodes[7]; arg.nodes[6].right_parent = arg.nodes[7]
         #-------
-        mcmc = argbook.MCMC()
+        mcmc = MC.MCMC()
         mcmc.arg = arg
         mcmc.arg.coal.update({5:5, 6:6 , 7:7})
         mcmc.arg.rec.update({3:3, 4:4 })
