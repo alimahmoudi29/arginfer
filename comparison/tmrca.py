@@ -27,9 +27,9 @@ python tmrca.py --general_path /data/projects/punim0594/Ali/phd/mcmc_out/ARGinfe
 
 '''
  in bash for multiple data sets: 
- for i in {0..161}; 
+ for i in {0..162}; 
  do /home/amahmoudi/miniconda3/envs/py37/bin/python tmrca.py 
- --general_path /data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K/out$i 
+ --general_path /data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K_ntimes40/out$i 
  --seq_length 1e5 -d   /home/amahmoudi/miniconda3/envs/py27/bin --argweaver_tmrca; done
 '''
 

@@ -1,6 +1,7 @@
 import numpy as np
 np.random.seed(19680801)
 data = np.random.randn(2, 100)
+import sys
 import os
 import pandas as pd
 import numpy as np
@@ -14,6 +15,11 @@ import seaborn as sns
 from statsmodels.graphics.tsaplots import plot_acf
 import statsmodels as sm
 from tqdm import tqdm
+f_dir = os.path.dirname(os.getcwd())#+"/ARGinfer"
+sys.path.append(f_dir)
+print(f_dir)
+import argbook
+from sortedcontainers import SortedList
 
 def t_test(x,y,alternative='both-sided', equal_var= False):
         '''stats.ttest_ind only provides two-sided test,
@@ -32,6 +38,26 @@ def t_test(x,y,alternative='both-sided', equal_var= False):
             else:
                 pval = 1.0 - double_p/2.
         return pval
+
+def neff(arr, nlags=100):
+        '''we first find acf with a high lag
+        the formula $n/1+2sum_{i=1}^{\infty(a large number)} \rho_{i}$), and then
+        only store the first T' lags where rho_T'+1 + rho_T'+2<0'''
+        n = len(arr)
+        acf = sm.tsa.stattools.acf(arr, nlags = nlags, fft = True, adjusted = True)
+        #---- this returns the autocorrelation at lag 0: delete it because the ess sum starts at lag1
+        acf= acf[1:]
+        #---- choose a reasonable cut off for nlags, lest choose the first time \rho is negative following
+        count=1
+        acf_sub=[acf[0]]
+        while (len(acf)>1) and (count<len(acf)-1) and acf[count+1]>0 :
+            acf_sub.append(acf[count])
+            count+=1
+        sums = 0
+        acf= np.array(acf_sub)
+        for k in range(1, len(acf)):# because in acf we used adjusted
+            sums = sums + (n-k)*acf[k]/n
+        return n/(1+2*sum(acf_sub))#n/(1+2*sums)#
 
 def coverage50_and_average_length_mse(truth ,inferred_mean,
                                       inferred_lower25,inferred_upper75, oneDataset= True):
@@ -71,7 +97,7 @@ class Figure(object):
             datafile_name = self.outpath+"/out.stats"
             self.data = self.argweaver_read(datafile_name)
 
-    def save(self, figure_name=None, bbox_inches="tight"):
+    def save(self, figure_name = None, bbox_inches="tight"):
         if figure_name is None:
             figure_name = self.name
         print("Saving figure '{}'".format(figure_name))
@@ -183,11 +209,13 @@ class Scatter(object):
         self.columns = columns
         self.truth_path = truth_path
         self.inferred_path = inferred_path
+        plt.rcParams['ytick.labelsize']='7'
+        plt.rcParams['xtick.labelsize']='7'
         if len(self.columns)/2 > 1:
             plot_dimension =[math.ceil(len(self.columns)/2),2]
         elif len(self.columns)/2 == 1:# adjust size
-            plot_dimension =[2,2]#math.ceil(len(self.columns)/2)
-            # plt.rcParams["figure.figsize"] = (4,1.5)
+            plot_dimension =[1,2]#math.ceil(len(self.columns)/2)
+            plt.rcParams["figure.figsize"] = (5,2)
         else:
             plot_dimension =[1, 1]
         self.fig = plt.figure(tight_layout=False)
@@ -209,7 +237,9 @@ class Scatter(object):
             self.gs = gridspec.GridSpec(1, 2)
         #row indexes with not None values
         self.not_None_rows = np.where(self.inferred_data['prior'].notnull())[0]
-        self.not_None_rows = list(set(self.not_None_rows) & set(not_None_rows_weaver))
+        print("type", type(self.not_None_rows))
+        if len(self.not_None_rows)==0 and len(not_None_rows_weaver)==0:
+            self.not_None_rows = list(set(self.not_None_rows) & set(not_None_rows_weaver))
 
     def ARGinfer_weaver(self,  R, both_infer_methods=False):
         '''for branch length and ancestral recombination
@@ -345,7 +375,8 @@ class Scatter(object):
         line_color= "red"
         point_color= "black"
         ecolor = "purple"
-        elinewidth = 0.9
+        elinewidth = 0.7
+        markersize= '4'
         self.gs.update(wspace=0.3, hspace=0.7) # set the spacing between axes.
         if column_index <2:
             ax = self.fig.add_subplot(self.gs[0, column_index])
@@ -362,33 +393,40 @@ class Scatter(object):
         if not CI:
             ax.errorbar(self.truth_data.loc[self.not_None_rows][self.columns[column_index]],
                             self.inferred_data.loc[self.not_None_rows][col],
-                            color = point_color,linestyle='', fmt=".")#fmt="o"
+                            color = point_color,linestyle='', fmt=".", marker = ".", markersize= markersize)#fmt="o"
         else:
             ax.errorbar(self.truth_data.loc[self.not_None_rows][self.columns[column_index]],
                         self.inferred_data.loc[self.not_None_rows][col],
                         yerr= [self.inferred_data.loc[self.not_None_rows][col] -
-                               self.inferred_data.loc[self.not_None_rows]['lower '+col],
-                               self.inferred_data.loc[self.not_None_rows]['upper '+col] -
+                               self.inferred_data.loc[self.not_None_rows]['lower25 '+col],
+                               self.inferred_data.loc[self.not_None_rows]['upper75 '+col] -
                                self.inferred_data.loc[self.not_None_rows][col]],
                                                             linestyle='', fmt=".",color= point_color,
-                                                            ecolor= ecolor, elinewidth=elinewidth)
+                                                            ecolor= ecolor, elinewidth=elinewidth,
+                                                            marker = ".", markersize= markersize)
             # ax.set_aspect('equal',adjustable="box")
         minimum = np.min((ax.get_xlim(),ax.get_ylim()))
         maximum = np.max((ax.get_xlim(),ax.get_ylim()))
         ax.set_ylabel("Inferred ")
         ax.set_xlabel("True "+ self.columns[column_index])
         #scientific number
-        ax.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
-        ax.ticklabel_format(style='sci',scilimits=(-2,2),axis='x')
+        ax.ticklabel_format(style='sci',scilimits=(-4,4),axis='y')
+        ax.ticklabel_format(style='sci',scilimits=(-4,4),axis='x')
         ax.plot([minimum, maximum], [minimum, maximum], ls="--",  color= line_color)
+        # Decorate
+        # lighten the borders
+        ax.spines["top"].set_alpha(.3)
+        ax.spines["bottom"].set_alpha(.3)
+        ax.spines["right"].set_alpha(.3)
+        ax.spines["left"].set_alpha(.3)
         if coverage:
             truth = self.truth_data.loc[self.not_None_rows][self.columns[column_index]].tolist()
-            coverage50, average_length, mse = coverage50_and_average_length_mse(truth ,
+            coverage50, average_length, rmse = coverage50_and_average_length_mse(truth ,
                                       self.inferred_data.loc[self.not_None_rows][col],
                                       self.inferred_data.loc[self.not_None_rows]['lower25 '+col],
                                       self.inferred_data.loc[self.not_None_rows]['upper75 '+col])
             print("stats for ", col)
-            print("coverage50: ", coverage50, "average_length: ",average_length, "mse: ",mse)
+            print("coverage50: ", coverage50, "average_length: ",average_length, "mse: ",rmse)
 
     def multi_scatter(self, CI = False, argweaver = False, coverage=True, R=1):
         '''
@@ -402,8 +440,8 @@ class Scatter(object):
             self.single_scatter(column_index=ind, CI= CI,
                                 argweaver= argweaver, coverage = coverage)
         if not argweaver:
-            self.fig.suptitle("ARGinfer, "+ r"$\theta\/rho = $"+ str(R))
-            figure_name= "scatter"+"ARGinferr"+str(R)
+            # self.fig.suptitle("ARGinfer, "+ r"$\theta/\rho = $"+ str(R))
+            figure_name= "scatter"+"ARGinferr"+str(R)+"non"
         else:
             self.fig.suptitle("ARGweaver, "+ r"$\theta\/rho = $"+ str(R))
             figure_name= "scatter"+"ARGweaver" +str(R)
@@ -456,8 +494,13 @@ def plot_tmrca(truth_path ='', argweaver_path='', arginfer_path='',
     true_tmrca= np.load(truth_path)
     argweaver_tmrca= pd.read_hdf(argweaver_path+"/"+inferred_filename, mode="r")
     arginfer_tmrca= pd.read_hdf(arginfer_path+"/"+inferred_filename, mode="r")
+    #--------- # font size of tick labels
+    plt.rcParams['ytick.labelsize']='7'
+    plt.rcParams['xtick.labelsize']='7'
+    plt.rcParams['ytick.color']='black'
+    # plt.rcParams['font.sans-serif']='Arial'
     fig = plt.figure(tight_layout=False, figsize=(7, 2))
-    fig.suptitle(r"$\theta/\rho = $"+ str(R), fontsize=9)
+    # fig.suptitle(r"$\theta/\rho = $"+ str(R), fontsize=9)
     fig.subplots_adjust(top=0.8)
     gs = gridspec.GridSpec(1, 2)
     #arginfer
@@ -490,7 +533,6 @@ def plot_tmrca(truth_path ='', argweaver_path='', arginfer_path='',
     ax1.set_ylabel("TMRCA", fontsize=fontsize)
     ax1.set_xlabel('Genomic Position', fontsize=fontsize)
     ax1.set_title("ARGinfer", fontsize=fontsize)
-    ax1.tick_params(axis="both", labelsize=7)
     #scientific number
     # ax1.set_yscale('symlog')
     # ax1.set_xscale('symlog')
@@ -517,10 +559,18 @@ def plot_tmrca(truth_path ='', argweaver_path='', arginfer_path='',
     # ax2.set_xscale('symlog')
     ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
     ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+    # Decorate
+    # lighten the borders
+    ax1.spines["top"].set_alpha(.3); ax2.spines["top"].set_alpha(.3)
+    ax1.spines["bottom"].set_alpha(.3); ax2.spines["bottom"].set_alpha(.3)
+    ax1.spines["right"].set_alpha(.3); ax2.spines["right"].set_alpha(.3)
+    ax1.spines["left"].set_alpha(.3); ax2.spines["left"].set_alpha(.3)
+    # font size of tick labels
+    # ax1.tick_params(axis='both', labelsize=10)
+    # ax2.tick_params(axis='both', labelsize=10)
     # fig.legend(loc = 'best')#upper right
     fig.legend(loc = 'upper right', bbox_to_anchor=bbox_to_anchor,
                fancybox=True,fontsize=6)
-    ax2.tick_params(axis="both", labelsize=7)
     figure_name= "tmrca_combined"+str(CI)
     plt.savefig(arginfer_path+"/{}.pdf".format(figure_name),
                 bbox_inches='tight', dpi=400)
@@ -702,9 +752,9 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
     trueR1_path= true_general_path+"/sim_r1"
     trueR2_path= true_general_path+"/sim_r2"
     trueR4_path= true_general_path+"/sim_r4"
-    weaverR1_path = argweaver_general_path+"/r1/n10L100K"
-    weaverR2_path = argweaver_general_path+"/r2/n10L100K"
-    weaverR4_path = argweaver_general_path+"/r4/n10L100K"
+    weaverR1_path = argweaver_general_path+"/r1/n10L100K_ntimes40"
+    weaverR2_path = argweaver_general_path+"/r2/n10L100K_ntimes40"
+    weaverR4_path = argweaver_general_path+"/r4/n10L100K_ntimes40"
     inferR1_path = arginfer_general_path+ "/n10L100K_r1"
     inferR2_path = arginfer_general_path+ "/n10L100K_r2"
     inferR4_path = arginfer_general_path+ "/n10L100K_r4"
@@ -777,7 +827,7 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
     flatui =["#adff2f", "#00ffff"] #["#228b22", "#4169e1"]##00ff7f
     tl_color = "r"
     sns.set_palette(sns.color_palette(flatui))
-    sns.boxplot(x='R', y='recombination rate', hue='model', data=data_df,
+    grid = sns.boxplot(x='R', y='recombination rate', hue='model', data=data_df,
                 linewidth=0.6, showfliers=False, width=0.6)
     plt.axhline(y= np.mean(true_R1["ancestral recomb"]/true_R1["branch length"]),
                 linewidth=0.75, color=tl_color, linestyle = "--", xmin=0, xmax=.5,  label="Truth")#1e-8
@@ -785,16 +835,16 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
                 linewidth=0.75, color=tl_color, linestyle = "--", xmin=0, xmax=.8)#0.5e-8
     plt.axhline(y=np.mean(true_R4["ancestral recomb"]/true_R4["branch length"]),
                 linewidth=0.75, color=tl_color, linestyle = "--", xmin=0, xmax=1)#0.25e-8
-
+    # grid.set(yscale="linear")#linear, log , symlog, logit
     #------------------ annotation
     bbox_props = dict(boxstyle="Square,pad=0.3", fc="w", ec="k", lw=.4)
     col1= "darkgreen"
     col2="blue"
     #--R1
     plt.text(0.915, 1.07e-8,'p-values',size=7, color="red")
-    plt.annotate(str(round(inferR1_ttest, 2)), xy=(0.941, 1.03e-8),
+    plt.annotate(str(round(inferR1_ttest, 3)), xy=(0.941, 1.03e-8),
                  xycoords = 'data', color=col1, fontsize=7, bbox= bbox_props, label="p-value")
-    plt.annotate(str(round(weaverR1_ttest, 20)), xy=(1.1, 1.03e-8),
+    plt.annotate(str(round(weaverR1_ttest, 21)), xy=(1.1, 1.03e-8),
                  xycoords = 'data', color=col2, fontsize=7, bbox= bbox_props, label="p-value")
     #---R2
     plt.text(1.82, 0.55e-8,'p-values',size=7, color="red")
@@ -806,7 +856,7 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
     plt.text(1.08, 0.30e-8,'p-values',size=7, color="red")
     plt.annotate(str(round(inferR4_ttest, 2)), xy=(1, .26e-8),
                  xycoords = 'data', color=col1, fontsize=7, bbox= bbox_props)
-    plt.annotate(str(round(weaverR4_ttest, 4)), xy=(1.2, .26e-8),
+    plt.annotate(str(round(weaverR4_ttest, 3)), xy=(1.2, .26e-8),
                  xycoords = 'data', color=col2, fontsize=7, bbox= bbox_props)
 
     # data =[[str(round(inferR1_ttest, 2)), str(round(inferR2_ttest, 2)),str(round(inferR4_ttest, 2)) ],
@@ -822,7 +872,7 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
     plt.legend(loc='upper right',fancybox=True)
     plt.xlabel(r"$\theta/ \rho$")#, size=10
     plt.ylabel(" Recombination rate")
-    figure_name= "recombRateBoxplot"
+    figure_name= "recombRateBoxplot_ntimes40"
     plt.title("Recombination rate estimation")
     plt.savefig(inferR1_path+"/{}.pdf".format(figure_name),
                 bbox_inches='tight', dpi=400)
@@ -844,9 +894,9 @@ def mutrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
     trueR1_path= true_general_path+"/sim_r1"
     trueR2_path= true_general_path+"/sim_r2"
     trueR4_path= true_general_path+"/sim_r4"
-    weaverR1_path = argweaver_general_path+"/r1/n10L100K"
-    weaverR2_path = argweaver_general_path+"/r2/n10L100K"
-    weaverR4_path = argweaver_general_path+"/r4/n10L100K"
+    weaverR1_path = argweaver_general_path+"/r1/n10L100K_ntimes40"
+    weaverR2_path = argweaver_general_path+"/r2/n10L100K_ntimes40"
+    weaverR4_path = argweaver_general_path+"/r4/n10L100K_ntimes40"
     inferR1_path = arginfer_general_path+ "/n10L100K_r1"
     inferR2_path = arginfer_general_path+ "/n10L100K_r2"
     inferR4_path = arginfer_general_path+ "/n10L100K_r4"
@@ -920,7 +970,7 @@ def mutrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
     plt.legend(loc='upper right',fancybox=True)
     plt.xlabel(r"$\theta/ \rho$")#, size=10
     plt.ylabel(" Mutation rate")
-    figure_name= "mutRateBoxplot"
+    figure_name= "mutRateBoxplot_ntimes40"
     plt.title("Mutation rate estimation")
     plt.savefig(inferR1_path+"/{}.pdf".format(figure_name),
                 bbox_inches='tight', dpi=400)
@@ -958,7 +1008,10 @@ def plot_allele_age(truth_path ='', argweaver_path='', arginfer_path='',
     arginfer_alAge.reset_index(inplace=True, drop=True)
     argweaver_alAge = argweaver_alAge.reindex(new_index)
     argweaver_alAge.reset_index(inplace=True, drop=True)
-
+    #--------- # font size of tick labels
+    plt.rcParams['ytick.labelsize']='7'
+    plt.rcParams['xtick.labelsize']='7'
+    plt.rcParams['ytick.color']='black'
     fig = plt.figure(tight_layout=False, figsize=(7, 2))
     gs = gridspec.GridSpec(1, 2)
     #arginfer
@@ -996,7 +1049,7 @@ def plot_allele_age(truth_path ='', argweaver_path='', arginfer_path='',
     ax1.set_title("ARGinfer",fontsize=fontsize)
     #scientific number
     ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
-    ax1.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+    ax1.ticklabel_format(style='sci',scilimits=(-2,2),axis='x')
     #argweaver
     ax2 = fig.add_subplot(gs[0, 1], sharey=ax1)
     ax2.plot(range(true_alAge.shape[0]),
@@ -1015,7 +1068,16 @@ def plot_allele_age(truth_path ='', argweaver_path='', arginfer_path='',
     ax2.set_xlabel('SNP', fontsize=fontsize)
     #scientific number
     ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='y')
-    ax2.ticklabel_format(style='sci',scilimits=(0,0),axis='x')
+    ax2.ticklabel_format(style='sci',scilimits=(-2,2),axis='x')
+    # Decorate
+    # lighten the borders
+    ax1.spines["top"].set_alpha(.3); ax2.spines["top"].set_alpha(.3)
+    ax1.spines["bottom"].set_alpha(.3); ax2.spines["bottom"].set_alpha(.3)
+    ax1.spines["right"].set_alpha(.3); ax2.spines["right"].set_alpha(.3)
+    ax1.spines["left"].set_alpha(.3); ax2.spines["left"].set_alpha(.3)
+    # font size of tick labels
+    # ax1.tick_params(axis='both', labelsize=10)
+    # ax2.tick_params(axis='both', labelsize=10)
     # fig.legend(loc = 'best')#upper right
     fig.legend(loc = 'center left', bbox_to_anchor=bbox_to_anchor,
                fancybox=True,fontsize=6, ncol=3)
@@ -1321,7 +1383,8 @@ def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
         minimum = np.min((ax.get_xlim(),ax.get_ylim()))
         maximum = np.max((ax.get_xlim(),ax.get_ylim()))
         ax.set_ylabel("Inferred ")
-        ax.set_xlabel("True "+ column[0])
+        # ax.set_xlabel("True "+ column[0])
+        ax.set_xlabel("Number of ancestral recombinations")
         #scientific number
         ax.ticklabel_format(style='sci',scilimits=(-2,2),axis='y')
         ax.ticklabel_format(style='sci',scilimits=(-2,2),axis='x')
@@ -1336,20 +1399,13 @@ def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
                     bbox_inches='tight', dpi=400)
         plt.close()
 
-def autocorrelation(arginfer_path='', column=["posterior", "branch length"], argweaver=False, thesis= False):
+def autocorrelation(arginfer_path='', column=["posterior", "branch length"], argweaver=False,
+                    thesis= False):
     '''great document on this:
      https://mc-stan.org/docs/2_20/reference-manual/effective-sample-size-section.html
      :param thesis if true, generate plot for the thesis, otherwise the plot for the talk. Note
         it thesis= True, argweaver mush be False
      '''
-    #------------ effective sample size
-    def neff(arr):
-        n = len(arr)
-        acf = sm.tsa.stattools.acf(arr, nlags = 1, fft = True, adjusted = True)#,
-        sums = 0
-        for k in range(1, len(acf)):
-            sums = sums + (n-k)*acf[k]/n
-        return n/(1+2*sums)
     if argweaver:
         f= Figure(arginfer_path, argweaver = argweaver)
         stats_df = f.data
@@ -1433,18 +1489,190 @@ def autocorrelation(arginfer_path='', column=["posterior", "branch length"], arg
             ax.tick_params(axis='both', labelsize=8)
             ax.annotate("ESS="+str(int(ess)+1), xy=(40, 0.9), color="red", fontsize=10)
         # anotate ess on acf
-
-
         figure_name= "autocorrelation"+"infer"+"Thesis"
     plt.savefig(arginfer_path+"/{}.pdf".format(figure_name),
                     bbox_inches='tight', dpi=400)
     plt.close()
 
+def trace_two_runs(arginfer1_path=" ", arginfer2_path=" ", column= ["posterior", "branch length",
+                                                                    "ancestral recomb", "non ancestral recomb"]):
+    data1 = pd.read_hdf(arginfer1_path + '/summary.h5', mode="r")
+    data2 =  pd.read_hdf(arginfer2_path + '/summary.h5', mode="r")
+    fig = plt.figure(tight_layout=False, figsize=(7, 9))
+    plt.rcParams['ytick.labelsize']='6'
+    plt.rcParams['xtick.labelsize']='6'
+    # plt.rcParams['ytick.color']='green'
+    # plt.rcParams['xtick.color']='green'
+    gs = gridspec.GridSpec(4, 2)
+    gs.update(wspace=0.3, hspace=0.4)
+    for ind in range(4):
+        ax1 = fig.add_subplot(gs[ind, 0])
+        ax2 = fig.add_subplot(gs[ind, 1], sharey=ax1)
+        if ind==0:
+            ax1.title.set_text('First run')
+            ax2.title.set_text('Second run')
+        if column[ind] == "posterior":
+           ylab="Posterior"
+        if column[ind] == "branch length":
+           ylab="Branch length"
+        if column[ind] == "ancestral recomb":
+           ylab="# of anc recomb"
+        if column[ind] == "non ancestral recomb":
+           ylab="# of non-anc recomb"
+        if ind <3:
+            xlab=""
+        else:
+            xlab="Iteration"
+        ax1.plot(data1[column[ind]])
+        ax2.plot(data2[column[ind]])
+        alpha= 0.7
+        ax1.spines["top"].set_alpha(alpha); ax2.spines["top"].set_alpha(alpha)
+        ax1.spines["bottom"].set_alpha(alpha);ax2.spines["bottom"].set_alpha(alpha)
+        ax1.spines["right"].set_alpha(alpha);ax2.spines["right"].set_alpha(alpha)
+        ax1.spines["left"].set_alpha(alpha);ax2.spines["left"].set_alpha(alpha)
+        ax1.set_xlabel(xlab, fontsize=11);ax2.set_xlabel(xlab, fontsize=11)
+        ax1.set_ylabel(ylab, fontsize=10);ax2.set_ylabel(ylab, fontsize=10)
+        # font size of tick labels
+        ax1.tick_params(axis='both', labelsize=8);ax2.tick_params(axis='both', labelsize=8)
+    # anotate ess on acf
+    figure_name= "trace_two_runs"+"Thesis"
+    plt.savefig(arginfer1_path+"/{}.pdf".format(figure_name),
+                    bbox_inches='tight', dpi=400)
+    plt.close()
+
+def average_ESS(arginfer_path='', argweaver= False, num_replicates=161):
+    '''average ESS over 161 simulated data sets for each R
+    the formula for '''
+    if argweaver:
+        ess=[]
+        column = ["posterior", "branch length", "total recomb"]
+        for i in range(num_replicates):
+            if os.path.isfile(arginfer_path+"/out" +str(i)+"/out.stats"):
+                f= Figure(arginfer_path+"/out"+str(i), argweaver = argweaver)
+                stats_df = f.data
+                del stats_df['noncompats']
+                burn_in=2000
+                sample_step= 10
+                # keep every sample_stepth after burn_in
+                infer_data = stats_df.iloc[burn_in::sample_step, :]
+                temp_ess=[]
+                print("data set number:", i)
+                for col in column:
+                    temp_ess.append(int(neff(infer_data[col].tolist()))+1)
+                ess.append(temp_ess)
+        ess= np.array(ess)
+        print("column", column)
+        print("ess is ", np.mean(ess, axis=0))
+    else:
+        ess=[]
+        column = ["posterior", "branch length", "ancestral recomb", "total recomb","non ancestral recomb"]
+        for i in range(num_replicates):
+            if os.path.isfile(arginfer_path+"/out" +str(i)+"/summary.h5"):
+                infer_data = pd.read_hdf(arginfer_path + "/out"+str(i)+'/summary.h5', mode="r")
+                temp_ess=[]
+                infer_data["total recomb"] = infer_data["ancestral recomb"] + infer_data["non ancestral recomb"]
+                print("data set number:", i)
+                for col in column:
+                    temp_ess.append(int(neff(infer_data[col].tolist()))+1)
+                ess.append(temp_ess)
+        ess= np.array(ess)
+        print("column", column)
+        print("ess is ", np.mean(ess, axis=0))
+
+def autocorrelation_two_runs(arginfer1_path='', arginfer2_path='',
+                             column= ["posterior", "branch length","ancestral recomb", "non ancestral recomb"]):
+    '''autocorrelation for two ind runs of the same data set
+    '''
+    #------------ effective sample size
+    data1 = pd.read_hdf(arginfer1_path + '/summary.h5', mode="r")
+    data2 = pd.read_hdf(arginfer2_path + '/summary.h5', mode="r")
+    fig = plt.figure(tight_layout=False, figsize=(7, 9))
+    gs = gridspec.GridSpec(4, 2)
+    gs.update(wspace=0.3, hspace=0.4)
+    for ind in range(len(column)):
+        ax1 = fig.add_subplot(gs[ind, 0])
+        ax2 = fig.add_subplot(gs[ind, 1], sharey=ax1)
+        if ind==0:
+            ax1.title.set_text('First run')
+            ax2.title.set_text('Second run')
+
+        if column[ind] == "posterior":
+           title="Posterior"
+           ylab="Autocorrelation"
+        if column[ind] == "branch length":
+           title="Total branch length"
+           ylab="Autocorrelation"
+        if column[ind] == "ancestral recomb":
+           title="Number of ancestral recomb"
+           ylab="Autocorrelation"
+        if column[ind] == "non ancestral recomb":
+           title="Number of non-ancestral recomb"
+           ylab="Autocorrelation"
+        if ind <3:
+            xlab=""
+        else:
+            xlab="Lag"
+        ess1=neff(data1[column[ind]].tolist(), nlags=100)
+        plot_acf(data1[column[ind]].tolist(), ax=ax1, lags=60, title= title,
+                 marker=".", color="green", linewidth=.3, adjusted= True)
+        ess2=neff(data2[column[ind]].tolist(), nlags=100)
+        plot_acf(data2[column[ind]].tolist(), ax=ax2, lags=60, title= title,
+                 marker=".", color="green", linewidth=.3, adjusted= True)
+        al= 0.5
+        ax1.spines["top"].set_alpha(al); ax2.spines["top"].set_alpha(al)
+        ax1.spines["bottom"].set_alpha(al); ax2.spines["bottom"].set_alpha(al)
+        ax1.spines["right"].set_alpha(al); ax2.spines["right"].set_alpha(al)
+        ax1.spines["left"].set_alpha(al); ax2.spines["left"].set_alpha(al)
+        ax1.set_xlabel(xlab); ax2.set_xlabel(xlab)
+        ax1.set_ylabel(ylab);ax2.set_ylabel(ylab)
+        # font size of tick labels
+        ax1.tick_params(axis='both', labelsize=7); ax2.tick_params(axis='both', labelsize=7)
+        ax1.annotate("ESS="+str(int(ess1)+1), xy=(40, 0.9), color="red", fontsize=10)
+        ax2.annotate("ESS="+str(int(ess2)+1), xy=(40, 0.9), color="red", fontsize=10)
+    # anotate ess on acf
+    figure_name= "autocorrelation_two_data"+"Thesis"
+    plt.savefig(arginfer1_path+"/{}.pdf".format(figure_name),
+                    bbox_inches='tight', dpi=400)
+    plt.close()
+
+def invisible_double_hit_recombs(general_path='', num_replicates=161):
+    ''''''
+    invisible_prop=[]
+    double_hit_prop=[]
+    for i in range(num_replicates):
+        print("data set", i)
+        temp_invisable=[]
+        temp_double_hit=[]
+        for entry in os.scandir(general_path+"/out"+str(i)):
+            if (entry.path.endswith(".arg")) and entry.is_file():
+                # print("ARG number:", count)
+                arg = argbook.ARG().load(entry.path)
+                br = SortedList()
+                invis_count =0
+                for node in arg.nodes.values():
+                    if node.breakpoint != None:
+                        br.add(node.breakpoint)
+                        if node.left_parent.left_parent.index ==\
+                            node.right_parent.left_parent.index:#invisible
+                            invis_count+=1
+                #proportion of invis recs in arg
+                if (arg.num_ancestral_recomb+ arg.num_nonancestral_recomb) >0:
+                    temp_invisable.append(invis_count/(arg.num_ancestral_recomb+ arg.num_nonancestral_recomb))
+                    temp_double_hit.append((len(br) - len(set(br)))/len(br))
+                else:
+                    temp_invisable.append(0)
+                    #proportion of double hit recs
+                    temp_double_hit.append(0)
+        invisible_prop.append(np.mean(temp_invisable))
+        double_hit_prop.append(np.mean(temp_double_hit))
+    print("Invisible recombination proprtion is:", np.mean(invisible_prop))
+    print("Double hit recombination proprtion is:", np.mean(double_hit_prop))
+
 if __name__=='__main__':
 
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r1',
-    #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'])
+    #            columns=['total recomb', 'posterior'])
     # s.multi_scatter(CI=True, argweaver= False, coverage = True, R=1)
     # s= Scatter(truth_path = '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
@@ -1454,13 +1682,13 @@ if __name__=='__main__':
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/n10L100K_r2',
     #            columns=["branch length", 'total recomb', "ancestral recomb", 'posterior'], std=True)
     # s.multi_std()
-    # plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r2/true_tmrca10.npy',
-    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out10',
-    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out10',
-    #                inferred_filename='tmrca.h5', CI= 50, R=2)
-    # plot_allele_age(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4/true_allele_age5.h5',
-    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r4/out5',
-    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K/out5',
+    # plot_tmrca(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4/true_tmrca7.npy',
+    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r4/out7',
+    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K/out7',
+    #                inferred_filename='tmrca.h5', CI= 50, R=4)
+    # plot_allele_age(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4/true_allele_age7.h5',
+    #                arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r4/out7',
+    #                 argweaver_path = '/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K/out7',
     #                inferred_filename='allele_age.h5', R=4, CI=50)
 
     # plot_interval(true_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
@@ -1482,7 +1710,7 @@ if __name__=='__main__':
     # compare_infer_weaver(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
     #                      argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
     #                      arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r4',
-    #                      column = ["branch length"], sub_sample =50)
+    #                      column = ["ancestral recomb"], sub_sample =50)
 
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
@@ -1499,6 +1727,25 @@ if __name__=='__main__':
     # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r1/out15',
     #                 column=["posterior", "branch length"])
     # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out11',
-    #                 column=["posterior", "branch length"], argweaver=True)
-    autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11',
-                    column=["posterior", "branch length", "ancestral recomb", "non ancestral recomb"], thesis= True)
+    #                 column=[ "posterior", "total recomb"], argweaver=True)
+    # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11',
+    #                 column=["posterior", "branch length", "ancestral recomb", "non ancestral recomb"], thesis= True)
+    # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_4',
+    #                 column=["posterior", "branch length", "ancestral recomb", "non ancestral recomb"], thesis= True)
+
+    # average_ESS(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
+    #             argweaver= True, num_replicates=161)
+    # average_ESS(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r4',
+    #             argweaver= False, num_replicates=161)
+
+    # trace_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11",
+    #                arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11_2")
+    # trace_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_2",
+    #                arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_4")
+
+    # autocorrelation_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11",
+    #                          arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11_2")
+    # autocorrelation_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_2",
+    #                          arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_4")
+    invisible_double_hit_recombs(general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r4',
+                                 num_replicates=150)

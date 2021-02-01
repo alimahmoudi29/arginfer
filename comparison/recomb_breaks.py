@@ -79,7 +79,6 @@ def main(args):
     plt.bar(bin_edges[:-1], hist, width = 50, color='#0504aa',alpha=0.9, label="ARGinfer")
     plt.xlim(min(bin_edges), max(bin_edges))
     # plt.grid(axis='y', alpha=0.75)
-
     hist,bin_edges = np.histogram(weaver_br, bins=2000, density= True)
     plt.bar(bin_edges[:-1], hist, width = 50, color='#b22222',alpha=0.7, label="ARGweaver")
     plt.xlim(min(bin_edges), max(bin_edges))

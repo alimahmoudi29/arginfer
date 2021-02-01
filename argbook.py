@@ -371,6 +371,14 @@ class Node(object):
         leftparent.update_child(self, child)
         rightparent.update_child(self, child)
 
+    def is_invisible_recomb(self):
+        '''self is a recomb child, check if the recomb is invisible'''
+        if self.left_parent.left_parent.index == \
+                self.right_parent.left_parent.index:# invisible
+            return True
+        else:
+            return False
+
 class ARG(object):
     '''
     Ancestral Recombination Graph
@@ -520,7 +528,6 @@ class ARG(object):
 
     #==========================
     # node manipulation
-
     def alloc_segment(self, left = None, right = None, node = None,
                       samples = bintrees.AVLTree(), prev = None, next = None):
         """
@@ -636,7 +643,6 @@ class ARG(object):
                     total_material += ((seg.right - seg.left)* age)
                     seg = seg.next
         return total_material
-
     #=======================
     #spr related
 
@@ -789,12 +795,20 @@ class ARG(object):
         age_df.reset_index(inplace=True, drop=True)
         return age_df
 
+    def invisible_recombs(self):
+        '''return the proportion of invisible recombs '''
+        invis_count=0
+        for node in self.nodes.values():
+            if node.breakpoint != None and node.is_invisible_recomb():
+                invis_count +=1
+        return invis_count/(self.num_ancestral_recomb+self.num_nonancestral_recomb)
     #@property
+
     def breakpoints(self, only_ancRec= False, set= True):
         '''
-
         :param only_ancRec: only ancestral rec with repetition
         :param set: if set, only uqique posittions are returned
+        :param invisible count the number of invisible recombs
         :return: either a list/set of all recombs
             or a list of anc rec that has repetition
         '''

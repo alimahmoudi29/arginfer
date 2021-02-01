@@ -13,7 +13,7 @@ python allele_age.py --general_path /data/projects/punim0594/Ali/phd/mcmc_out/AR
 '''all 161 data together
  for i in {0..161};   
  do /home/amahmoudi/miniconda3/envs/py37/bin/python allele_age.py 
---general_path /data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K/out$i 
+--general_path /data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K_ntimes40/out$i 
  -d   /home/amahmoudi/miniconda3/envs/py27/bin
 --argweaver_allele_age;  
 done

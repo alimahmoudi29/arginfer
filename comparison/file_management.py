@@ -16,11 +16,9 @@ For ARGinfer:
 #--------------------------------------
 For ARGweaver:
 python  file_management.py --replicate 162 \
-    --general_path "/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K" \
+    --general_path "/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K_ntimes40" \
     --read_summary_mf --argweaver
 '''
-
-
 
 def read_summary_multiple_folder(replicate, general_path,
                                  argweaver = False):
