@@ -18,7 +18,6 @@ python allele_age.py --general_path /data/projects/punim0594/Ali/phd/mcmc_out/AR
 --argweaver_allele_age;  
 done
 '''
-
 import os
 import pandas as pd
 import sys

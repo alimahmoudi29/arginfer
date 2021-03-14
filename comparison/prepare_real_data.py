@@ -121,6 +121,7 @@ class prepareD(object):
         np.savetxt(out_path+'/ancestral_allele_'+self.output_postfix+'.txt',
                    self.ancestral_allele[4].tolist(),
                    delimiter='',  fmt='%s')
+
     def make_argweaver_sites_file(self):
         with open(self.data_path + "/cleaned_data"+"/argweaver.sites", "w+") as aw_in:
             print("\t".join(["NAMES"]+[str(x) for x in range(self.haplotypes.shape[0])]), file=aw_in)

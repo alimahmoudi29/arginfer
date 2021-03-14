@@ -10,7 +10,7 @@ a summary of all the individual summaries for each data set:
 
 For ARGinfer: 
 /home/amahmoudi/miniconda3/envs/py37/bin/python  file_management.py --replicate 162 \
-    --general_path /data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r1 \
+    --general_path /data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r1 \
     --read_summary_mf 
     
 #--------------------------------------

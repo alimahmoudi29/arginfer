@@ -12,7 +12,7 @@ sys.path.append(f_dir)
 import argbook
 
 '''
-python tmrca.py --general_path /data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out10 \
+python tmrca.py --general_path /data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r2/out0 \
  --seq_length 1e5 \
  -d   /home/amahmoudi/miniconda3/envs/py27/bin \
  --argweaver_tmrca
@@ -32,8 +32,6 @@ python tmrca.py --general_path /data/projects/punim0594/Ali/phd/mcmc_out/ARGinfe
  --general_path /data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K_ntimes40/out$i 
  --seq_length 1e5 -d   /home/amahmoudi/miniconda3/envs/py27/bin --argweaver_tmrca; done
 '''
-
-
 
 def arginfer_tmrca(general_path, sequence_length):
     '''

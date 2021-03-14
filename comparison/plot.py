@@ -364,11 +364,9 @@ class Scatter(object):
             ax2.ticklabel_format(style='sci',scilimits=(-1,1),axis='x')
             ax2.plot([minimum, maximum], [minimum, maximum], ls="--",  color= line_color, label ="Truth")
             figure_name= "bothinferenceModels"+ str(R)
-
         plt.savefig(self.inferred_path+"/{}.pdf".format(figure_name),
                     bbox_inches='tight', dpi=400)
         plt.close()
-
 
     def single_scatter(self, column_index, CI = False,
                        argweaver= False, coverage =True):
@@ -748,13 +746,12 @@ def plot_interval(true_path = '', argweaver_path=' ', arginfer_path=' ',
 def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K',
                     argweaver_general_path=' ',
                     arginfer_general_path=' '):
-
     trueR1_path= true_general_path+"/sim_r1"
     trueR2_path= true_general_path+"/sim_r2"
     trueR4_path= true_general_path+"/sim_r4"
-    weaverR1_path = argweaver_general_path+"/r1/n10L100K_ntimes40"
-    weaverR2_path = argweaver_general_path+"/r2/n10L100K_ntimes40"
-    weaverR4_path = argweaver_general_path+"/r4/n10L100K_ntimes40"
+    weaverR1_path = argweaver_general_path+"/r1/n10L100K"#_ntimes40"
+    weaverR2_path = argweaver_general_path+"/r2/n10L100K"#_ntimes40"
+    weaverR4_path = argweaver_general_path+"/r4/n10L100K"#_ntimes40"
     inferR1_path = arginfer_general_path+ "/n10L100K_r1"
     inferR2_path = arginfer_general_path+ "/n10L100K_r2"
     inferR4_path = arginfer_general_path+ "/n10L100K_r4"
@@ -774,7 +771,6 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
         return both_df
     #R1 data
     # "/true_summary.h5", mode="r"
-
     inferR1_data = pd.read_hdf(inferR1_path + '/summary_all.h5', mode="r")
     weaverR1_data = pd.read_hdf(weaverR1_path + "/summary_all.h5", mode="r")
     not_None_rowsR1 = np.where(inferR1_data['prior'].notnull())[0]
@@ -789,8 +785,6 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
                       popmean=np.mean(true_R1["ancestral recomb"]/true_R1["branch length"]), nan_policy="omit")[1]
     weaverR1_ttest= stats.ttest_1samp(R1_data["recombination rate"][R1_data["model"]=="ARGweaver"],
                       popmean=np.mean(true_R1["ancestral recomb"]/true_R1["branch length"]), nan_policy="omit")[1]
-
-
     # R2 data
     inferR2_data = pd.read_hdf(inferR2_path + '/summary_all.h5', mode="r")
     weaverR2_data = pd.read_hdf(weaverR2_path + "/summary_all.h5", mode="r")
@@ -805,7 +799,6 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
                       popmean=np.mean(true_R2["ancestral recomb"]/true_R2["branch length"]), nan_policy="omit")[1]
     weaverR2_ttest = stats.ttest_1samp(R2_data["recombination rate"][R2_data["model"]=="ARGweaver"],
                       popmean=np.mean(true_R2["ancestral recomb"]/true_R2["branch length"]), nan_policy="omit")[1]
-
     #-- R4
     inferR4_data = pd.read_hdf(inferR4_path + '/summary_all.h5', mode="r")
     weaverR4_data = pd.read_hdf(weaverR4_path + "/summary_all.h5", mode="r")
@@ -872,7 +865,7 @@ def recrate_boxplot(true_general_path = '/data/projects/punim0594/Ali/phd/mcmc_o
     plt.legend(loc='upper right',fancybox=True)
     plt.xlabel(r"$\theta/ \rho$")#, size=10
     plt.ylabel(" Recombination rate")
-    figure_name= "recombRateBoxplot_ntimes40"
+    figure_name= "recombRateBoxplot_ntimes20"
     plt.title("Recombination rate estimation")
     plt.savefig(inferR1_path+"/{}.pdf".format(figure_name),
                 bbox_inches='tight', dpi=400)
@@ -1080,7 +1073,7 @@ def plot_allele_age(truth_path ='', argweaver_path='', arginfer_path='',
     # ax2.tick_params(axis='both', labelsize=10)
     # fig.legend(loc = 'best')#upper right
     fig.legend(loc = 'center left', bbox_to_anchor=bbox_to_anchor,
-               fancybox=True,fontsize=6, ncol=3)
+               fancybox=True,fontsize=6, ncol=4)
     figure_name= "allele_age_combined"+ str(CI)
     plt.savefig(arginfer_path+"/{}.pdf".format(figure_name),
                 bbox_inches='tight', dpi=400)
@@ -1152,11 +1145,11 @@ def get_summary_tmrca_allele_age(truth_general_path ='',
             if infer_MSE<=weaver_MSE:
                 count_lower_rMSE +=1
             total_data += 1
-
         else:
             pass
             # coverage_df.loc[coverage_df.shape[0]] =[None for i in range(5)]
     coverage_df.to_hdf(arginfer_general_path + "/coverage_all"+feature+".h5", key = "df")
+    print("dimension", coverage_df.shape)
     #-------- do some ploting
     infer_df = coverage_df[coverage_df["model"]=="ARGinfer"]
     infer_df.reset_index(inplace=True, drop=True)
@@ -1251,7 +1244,7 @@ def get_summary_tmrca_allele_age(truth_general_path ='',
     # now we can plot it
 
 def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
-                         column = ["branch length"], sub_sample =50):
+                         column = ["branch length"], sub_sample =50, R=1, sample_size=10):
         '''
         only one scatter plot for  a sub set (sub_sample) of data sets to
         plot both argweaver and arginfer side by side
@@ -1302,9 +1295,7 @@ def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
         # plt.savefig(arginfer_path+"/{}.pdf".format(join_figure_name),
         #             bbox_inches='tight')#, dpi=200
         # plt.close()
-
         #-------------------------------------------------ed test
-
         fig = plt.figure(tight_layout=False, figsize=(8, 3))
         print("plot size in inch:",plt.rcParams.get('figure.figsize'))
         gs = gridspec.GridSpec(1, 1)
@@ -1325,10 +1316,7 @@ def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
                                       weaver_data.loc[not_None_rows][weaver_col],
                                       weaver_data.loc[not_None_rows]['lower25 '+weaver_col],
                                       weaver_data.loc[not_None_rows]['upper75 '+weaver_col], oneDataset=False)
-
-
         assert mse_df_weaver.shape[0] == mse_df_infer.shape[0]
-
         print("stats for ", column[0])
         print("ARGinfer Statistics:\n")
         print("coverage50 mean: ", coverage50_infer,  "\nAvg_len mean: ",
@@ -1347,10 +1335,12 @@ def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
                                      alternative='less'))
         # print("coverage50: ", coverage50, "average_length: ",average_length, "mse: ",mse)
         #sub sample:
+        rho=  1e-8 *4*5000*1e5 /R
+        if column[0]=="ancestral recomb":
+            true_prior_mean = rho * sum([1/i for i in range(1,sample_size)])# analytical prior mean
         truth_data = truth_data.loc[not_None_rows][0:sub_sample]
         infer_data= infer_data.loc[not_None_rows][0:sub_sample]
         weaver_data= weaver_data.loc[not_None_rows][0:sub_sample]
-
         # line_color= "black"
         # point_color= ["#483d8b","#a52a2a"]
         # ecolor = ["#6495ed","#ff7f50"]##dc143c #8a2be2#00ffff
@@ -1382,9 +1372,14 @@ def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
             # ax.set_aspect('equal',adjustable="box")
         minimum = np.min((ax.get_xlim(),ax.get_ylim()))
         maximum = np.max((ax.get_xlim(),ax.get_ylim()))
+        if column[0]=="ancestral recomb":
+            plt.axvline(x=true_prior_mean, color='green', linestyle='--', linewidth=.7)
         ax.set_ylabel("Inferred ")
         # ax.set_xlabel("True "+ column[0])
-        ax.set_xlabel("Number of ancestral recombinations")
+        if column[0] =="branch length":
+            ax.set_xlabel("Branch length")
+        else:
+            ax.set_xlabel("Number of ancestral recombinations")
         #scientific number
         ax.ticklabel_format(style='sci',scilimits=(-2,2),axis='y')
         ax.ticklabel_format(style='sci',scilimits=(-2,2),axis='x')
@@ -1399,7 +1394,7 @@ def compare_infer_weaver(truth_path ='', argweaver_path='', arginfer_path='',
                     bbox_inches='tight', dpi=400)
         plt.close()
 
-def autocorrelation(arginfer_path='', column=["posterior", "branch length"], argweaver=False,
+def autocorrelation(arginfer_path='', column=["posterior", "branch length"], argweaver=False,nlags=60,
                     thesis= False):
     '''great document on this:
      https://mc-stan.org/docs/2_20/reference-manual/effective-sample-size-section.html
@@ -1421,11 +1416,10 @@ def autocorrelation(arginfer_path='', column=["posterior", "branch length"], arg
     # for item in column:
     #     print("ttest for:", item, t_test(infer_data[item],infer_second_run[item],
     #                                      alternative='both-sided', equal_var= False))
-
     if not thesis:
         fig, (ax1, ax2) = plt.subplots(1, 2,figsize=(10,3), dpi= 80)
         print("infer_data[column[0]].tolist()",len(infer_data[column[0]].tolist()))
-        plot_acf(infer_data[column[0]].tolist(), ax=ax2, lags=60, title="",
+        plot_acf(infer_data[column[0]].tolist(), ax=ax2, lags=nlags, title="",
                  marker=".", color="green", linewidth=.7, adjusted= True)
         # plot_acf(infer_data[column[1]].tolist(), ax=ax2, lags=50)
         # plot_pacf(df.traffic.tolist(), ax=ax2, lags=20)
@@ -1477,7 +1471,7 @@ def autocorrelation(arginfer_path='', column=["posterior", "branch length"], arg
                     title = "Non-ancestral recombination"
                     ylab=""
             ess=neff(infer_data[column[ind]].tolist())
-            plot_acf(infer_data[column[ind]].tolist(), ax=ax, lags=60, title= title,
+            plot_acf(infer_data[column[ind]].tolist(), ax=ax, lags=nlags, title= title,
                      marker=".", color="green", linewidth=.7, adjusted= True)
             ax.spines["top"].set_alpha(.2)
             ax.spines["bottom"].set_alpha(.2)
@@ -1539,6 +1533,10 @@ def trace_two_runs(arginfer1_path=" ", arginfer2_path=" ", column= ["posterior",
     plt.savefig(arginfer1_path+"/{}.pdf".format(figure_name),
                     bbox_inches='tight', dpi=400)
     plt.close()
+    #----- t_test for two independent run to ckeck if their mean are different
+    for item in column:
+        print("ttest for:", item, t_test(data1[item],data2[item],
+                                         alternative='both-sided', equal_var= True))
 
 def average_ESS(arginfer_path='', argweaver= False, num_replicates=161):
     '''average ESS over 161 simulated data sets for each R
@@ -1556,11 +1554,12 @@ def average_ESS(arginfer_path='', argweaver= False, num_replicates=161):
                 # keep every sample_stepth after burn_in
                 infer_data = stats_df.iloc[burn_in::sample_step, :]
                 temp_ess=[]
-                print("data set number:", i)
+                # print("data set number:", i)
                 for col in column:
                     temp_ess.append(int(neff(infer_data[col].tolist()))+1)
                 ess.append(temp_ess)
         ess= np.array(ess)
+        print("---------_ARGWEAVER-----------------")
         print("column", column)
         print("ess is ", np.mean(ess, axis=0))
     else:
@@ -1571,11 +1570,16 @@ def average_ESS(arginfer_path='', argweaver= False, num_replicates=161):
                 infer_data = pd.read_hdf(arginfer_path + "/out"+str(i)+'/summary.h5', mode="r")
                 temp_ess=[]
                 infer_data["total recomb"] = infer_data["ancestral recomb"] + infer_data["non ancestral recomb"]
-                print("data set number:", i)
+                # burn_in=1000 # burn-in 600K
+                # sample_step= 1# samples 400
+                # # keep every sample_stepth after burn_in
+                # infer_data = infer_data.iloc[burn_in::sample_step, :]
+                # print("DIM:------", infer_data.shape)
                 for col in column:
                     temp_ess.append(int(neff(infer_data[col].tolist()))+1)
                 ess.append(temp_ess)
         ess= np.array(ess)
+        print("---------_ARGINFER-----------------")
         print("column", column)
         print("ess is ", np.mean(ess, axis=0))
 
@@ -1631,6 +1635,106 @@ def autocorrelation_two_runs(arginfer1_path='', arginfer2_path='',
         ax2.annotate("ESS="+str(int(ess2)+1), xy=(40, 0.9), color="red", fontsize=10)
     # anotate ess on acf
     figure_name= "autocorrelation_two_data"+"Thesis"
+    plt.savefig(arginfer1_path+"/{}.pdf".format(figure_name),
+                    bbox_inches='tight', dpi=400)
+    plt.close()
+
+def convergence_trace_autocorrelation_two_runs(arginfer1_path='', arginfer2_path='',
+                             column= ["posterior", "branch length","ancestral recomb", "non ancestral recomb"]):
+    '''autocorrelation for two ind runs of the same data set
+    '''
+    #------------ effective sample size
+    data1 = pd.read_hdf(arginfer1_path + '/summary.h5', mode="r")
+    data2 = pd.read_hdf(arginfer2_path + '/summary.h5', mode="r")
+    if len(column)==4:
+        fig = plt.figure(tight_layout=True, figsize=(6, 7))
+        gs = gridspec.GridSpec(len(column), 4)
+        gs.update(wspace=0.5, hspace=0.3)
+    else:#its 2
+        fig = plt.figure(tight_layout=True, figsize=(8, 4))
+        gs = gridspec.GridSpec(len(column), 4)
+        gs.update(wspace=0.3, hspace=0.3)
+
+    plt.rcParams['ytick.labelsize']='6'
+    plt.rcParams['xtick.labelsize']='6'
+    for ind in range(len(column)):
+        ax1 = fig.add_subplot(gs[ind, 0])
+        ax2 = fig.add_subplot(gs[ind, 1], sharey=ax1)#, sharey=ax1
+        ax3 = fig.add_subplot(gs[ind, 2])
+        ax4 = fig.add_subplot(gs[ind, 3])
+
+        if ind==0:
+            ax1.set_title('First run', fontsize=6)
+            ax2.set_title('Second run', fontsize=6)
+            ax3.set_title('Posterior density', fontsize=6)
+            ax4.set_title('Autocorrelation', fontsize=6)
+        if column[ind] == "posterior":
+           ylab="log(Posterior density)"
+        if column[ind] == "branch length":
+           ylab="Total branch length"
+        if column[ind] == "ancestral recomb":
+           ylab="Number of ancestral recomb"
+        if column[ind] == "non ancestral recomb":
+           ylab="Number of non-ancestral recomb"
+        if (ind <3 and len(column)==4) or (ind<1 and len(column)==2) :
+            xlab1 =xlab2=xlab3=xlab4=""
+        if (ind == 3 and len(column)==4) or (ind==1 and len(column)==2):
+            xlab1="Iteration"
+            xlab2= "Iteration"
+            xlab3= " "
+            xlab4= "Lag"
+
+        #trace1, ax1
+        ax1.plot(data1[column[ind]], color="blue")
+        #trace2 ax2
+        ax2.plot(data2[column[ind]], color="red")
+        #------- posterior density  ax3
+        bins= 40
+        sns.distplot(data1[column[ind]].tolist(), hist = False, kde = True,color="blue",
+                 kde_kws = {'shade': True,'linewidth': .5},
+                 label = "First run", bins=bins, ax= ax3)
+        sns.distplot(data2[column[ind]].tolist(), hist = False, kde = True, color="red",
+                 kde_kws = {'shade': True,'linewidth': .5},
+                 label = "Second run", bins=bins, ax=ax3)
+        ax3.set_ylabel(" ")
+        #-----autocorrelation ax4
+        nlags=20
+        autoCore_data1=sm.tsa.stattools.acf(data1[column[ind]].tolist(), nlags=nlags,
+                                            adjusted=True, fft=False)
+        autoCore_data2=sm.tsa.stattools.acf(data2[column[ind]].tolist(), nlags=nlags,
+                                            adjusted=True, fft=False)
+        ax4.bar(range(20), autoCore_data1[0:nlags], width=.17, color= "blue", label="First run")
+        ax4.plot(range(20), autoCore_data1[0:nlags], marker=".", linestyle="", color="blue")#marker
+
+        ax4.bar(np.arange(20)+0.3, autoCore_data2[0:nlags], color="red", width=0.17, label="Second run")
+        ax4.plot(np.arange(20)+0.3, autoCore_data2[0:nlags], marker=".", linestyle="",  color="red")#marker
+        if ind==0 :
+            if len(column)==4:
+                fontsize=3
+            else:
+                fontsize=6
+            ax4.legend(loc = 'top right', #bbox_to_anchor=bbox_to_anchor,
+                   fancybox=True,fontsize=fontsize, ncol=1)
+
+
+        al= 0.5
+        ax1.spines["top"].set_alpha(al); ax2.spines["top"].set_alpha(al)
+        ax3.spines["top"].set_alpha(al);ax4.spines["top"].set_alpha(al)
+        ax1.spines["bottom"].set_alpha(al); ax2.spines["bottom"].set_alpha(al)
+        ax3.spines["bottom"].set_alpha(al); ax4.spines["bottom"].set_alpha(al)
+        ax1.spines["right"].set_alpha(al); ax2.spines["right"].set_alpha(al)
+        ax3.spines["right"].set_alpha(al); ax4.spines["right"].set_alpha(al)
+        ax1.spines["left"].set_alpha(al); ax2.spines["left"].set_alpha(al)
+        ax3.spines["left"].set_alpha(al); ax4.spines["left"].set_alpha(al)
+        ax1.set_xlabel(xlab1, fontsize=6); ax2.set_xlabel(xlab2, fontsize=6)
+        ax3.set_xlabel(xlab3, fontsize=6); ax4.set_xlabel(xlab4, fontsize=6)
+        ax1.set_ylabel(ylab, fontsize=6)#;ax2.set_ylabel(ylab, fontsize=6)
+        #ax3.set_ylabel(ylab, fontsize=6);ax4.set_ylabel(ylab, fontsize=6)
+        # font size of tick labels
+        ax1.tick_params(axis='both', labelsize=5); ax2.tick_params(axis='both', labelsize=5)
+        ax3.tick_params(axis='both', labelsize=5); ax4.tick_params(axis='both', labelsize=5)
+    # anotate ess on acf
+    figure_name= "convergence_trace_autocorrelation_two_runs"+str(int(len(column)))
     plt.savefig(arginfer1_path+"/{}.pdf".format(figure_name),
                     bbox_inches='tight', dpi=400)
     plt.close()
@@ -1697,20 +1801,20 @@ if __name__=='__main__':
     #                       columns=["branch length", "ancestral recomb"], R=4)
 
     # recrate_boxplot(argweaver_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw',
-    #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2')
+    #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3')
 
     # mutrate_boxplot(argweaver_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw',
     #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2')
     # get_summary_tmrca_allele_age(truth_general_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
-    #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r1',
+    #                 arginfer_general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r1',
     #                 argweaver_general_path ='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
-    #                 replicate=161,
-    #                 feature = "tmrca", R=1)
+    #                 replicate = 160,
+    #                 feature = "allele_age", R=1)
     #
-    # compare_infer_weaver(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
-    #                      argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
-    #                      arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r4',
-    #                      column = ["ancestral recomb"], sub_sample =50)
+    compare_infer_weaver(truth_path ='/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
+                         argweaver_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
+                         arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r4',
+                         column = ["ancestral recomb"], sub_sample =50, R=4)
 
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r1',
     #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r1',
@@ -1719,33 +1823,36 @@ if __name__=='__main__':
     # s.ARGinfer_weaver(R=1)
 
     # s= Scatter(truth_path= '/data/projects/punim0594/Ali/phd/mcmc_out/sim10L100K/sim_r4',
-    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2/n10L100K_r4',
+    #            inferred_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r4',
     #            inferred2_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
     #            columns=["ancestral recomb"], weaver_infer=True)
     # s.ARGinfer_weaver(R=4, both_infer_methods = True)
 
-    # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r1/out15',
+    # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r2/out11',
     #                 column=["posterior", "branch length"])
     # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r2/n10L100K/out11',
     #                 column=[ "posterior", "total recomb"], argweaver=True)
-    # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11',
+    # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r2/out11',
     #                 column=["posterior", "branch length", "ancestral recomb", "non ancestral recomb"], thesis= True)
     # autocorrelation(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_4',
     #                 column=["posterior", "branch length", "ancestral recomb", "non ancestral recomb"], thesis= True)
 
-    # average_ESS(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r4/n10L100K',
+    # average_ESS(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/aw/r1/n10L100K',
     #             argweaver= True, num_replicates=161)
-    # average_ESS(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r4',
+    # average_ESS(arginfer_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r1',
     #             argweaver= False, num_replicates=161)
 
-    # trace_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11",
-    #                arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11_2")
+    # trace_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r2/out11",
+    #                arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r2/out11/M2")
     # trace_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_2",
     #                arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_4")
 
-    # autocorrelation_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11",
-    #                          arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r2/out11_2")
+    # autocorrelation_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r2/out11",
+    #                          arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r2/out11/M2")
     # autocorrelation_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_2",
     #                          arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/chr1/n5L50K/out2M_4")
-    invisible_double_hit_recombs(general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_2/n10L100K_r4',
-                                 num_replicates=150)
+    # convergence_trace_autocorrelation_two_runs(arginfer1_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r2/out11",
+    #                arginfer2_path="/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r2/out11/M2"
+    #                     )#column= ["branch length","ancestral recomb"]
+    # invisible_double_hit_recombs(general_path='/data/projects/punim0594/Ali/phd/mcmc_out/ARGinfer/M2_3/n10L100K_r4',
+    #                              num_replicates=150)

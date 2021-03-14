@@ -41,7 +41,7 @@ class TreeSeq(object):
             x = self.arg.alloc_segment(0, math.ceil(self.seq_length), node, samples)
             self.parent_nodes[k] = x
 
-    def find_break(self, z, break_point):
+    def find_break(self, z,break_point):
         while z.prev is not None:
             z = z.prev
         while z is not None:
@@ -146,7 +146,6 @@ class TreeSeq(object):
         self.arg.rec[node.index] = node.index
 
     def commom_ancestor_event(self, time, child0, child1, p):
-
         x = self.parent_nodes[child0]
         y = self.parent_nodes[child1]
         x = x.get_first_segment()

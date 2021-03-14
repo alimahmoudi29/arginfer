@@ -1077,7 +1077,7 @@ class ARG(object):
                               node.snps, s.samples, sep="\t")
                     s = s.next
 
-#====== verification
+#============== verification
 
 def verify_mutation_node(node, data):
     '''
