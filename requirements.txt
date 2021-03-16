@@ -5,7 +5,6 @@ bintrees
 msprime
 argparse
 tqdm
-unittest
 copy
 matplotlib
 pickle
