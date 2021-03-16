@@ -3,7 +3,6 @@ pandas
 sortedcontainers
 bintrees
 msprime
-random
 argparse
 tqdm
 unittest
