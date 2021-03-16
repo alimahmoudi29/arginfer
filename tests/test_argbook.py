@@ -3,23 +3,21 @@ import math
 import collections
 import msprime
 import os
-import argbook
-import treeSequence
+from arginfer import argbook, treeSequence, mcmc as MC
 import bintrees
-import mcmc as MC
-import time
+
 
 class TestSegment(unittest.TestCase):
 
     def test_equal_samples(self):
         #equal
-        s1 = argbook.Segment(); s1.samples.update({k:k for k in [0, 1, 2]})
+        s1 = argbook.Segment(); s1.samples.update( {k:k for k in [0, 1, 2]} )
         s1.left = 0; s1.right = 10
-        s2 = argbook.Segment(); s2.samples.update({k:k for k in [0, 1, 2]})
+        s2 = argbook.Segment(); s2.samples.update( {k:k for k in [0, 1, 2]} )
         s2.left = 0; s2.right = 10
         self.assertTrue(s1.equal_samples(s2), True)
         #------ not equal
-        s3 = argbook.Segment(); s3.samples.update({k:k for k in [0, 1]})
+        s3 = argbook.Segment(); s3.samples.update( {k:k for k in [0, 1]} )
         s3.left = 1; s3.right = 10
         self.assertFalse(s1.equal_samples(s3), False)
         #----- cases with repeat
@@ -28,7 +26,7 @@ class TestSegment(unittest.TestCase):
         # self.assertFalse(s1.equal_samples(s4), False)
 
     def test_contains(self):
-        s1 = argbook.Segment(); s1.samples.update({k:k for k in [0, 1, 2]})
+        s1 = argbook.Segment(); s1.samples.update( {k:k for k in [0, 1, 2]} )
         s1.left = 0; s1.right = 10
         self.assertFalse(s1.contains(10), False)
         self.assertTrue(s1.contains(0), True)
@@ -36,29 +34,29 @@ class TestSegment(unittest.TestCase):
 
     def test_is_mrca(self):
         sample_size = 5
-        s1 = argbook.Segment(); s1.samples.update({k:k for k in [0, 1, 2,3 ,4]})
+        s1 = argbook.Segment(); s1.samples.update( {k:k for k in [0, 1, 2, 3 , 4]} )
         s1.left = 0; s1.right = 10
         self.assertTrue(s1.is_mrca(sample_size), True)
         self.assertEqual(len(set(s1.samples)), len(s1.samples))
         self.assertTrue(len(s1.samples) <= sample_size)
 
     def test_union_samples(self):
-        s1 = argbook.Segment(); s1.samples.update({k:k for k in [0, 1,2]})
+        s1 = argbook.Segment(); s1.samples.update( {k:k for k in [0, 1, 2]} )
         s1.left = 0; s1.right = 10
-        s2 = argbook.Segment(); s2.samples.update({k:k for k in [3, 4]})
+        s2 = argbook.Segment(); s2.samples.update( {k:k for k in [3, 4]} )
         s2.left = 0; s2.right = 10
         self.assertEqual(sorted(s1.union_samples(s2)), [0, 1, 2, 3, 4])
         self.assertEqual(sorted(s1.samples),[0, 1, 2])
 
     def test_equal(self):
-        s1 = argbook.Segment(); s1.samples =[0, 1,2]
-        s1.left = 0; s1.right = 10; s1.node = argbook.Node(2)
+        s1 = argbook.Segment(); s1.samples =[0, 1, 2]
+        s1.left = 0; s1.right = 10; s1.node = argbook.Node( 2 )
         s2 = argbook.Segment(); s2.samples =[0, 1, 2]
-        s2.left = 0; s2.right = 10; s2.node = argbook.Node(2)
+        s2.left = 0; s2.right = 10; s2.node = argbook.Node( 2 )
         self.assertTrue(s1.equal(s2))
         #----
-        s3 = argbook.Segment(); s3.samples.update({k:k for k in [0, 1,2]})
-        s3.left = 0; s3.right = 10; s3.node = argbook.Node(1)
+        s3 = argbook.Segment(); s3.samples.update( {k:k for k in [0, 1, 2]} )
+        s3.left = 0; s3.right = 10; s3.node = argbook.Node( 1 )
         self.assertFalse(s3.equal(s1))
         #----- samples
         #----
@@ -69,9 +67,9 @@ class TestSegment(unittest.TestCase):
     def test_defrag_segment_chain(self):
         s1 = argbook.Segment(); s2 = argbook.Segment()
         s1.samples.update({k:k for k in [0, 1,2]})
-        s1.left = 10; s1.right = 20; s1.node = argbook.Node(2)
+        s1.left = 10; s1.right = 20; s1.node = argbook.Node( 2 )
         s2.samples.update({k:k for k in [0, 1,2]})
-        s2.left = 0; s2.right = 10; s2.node = argbook.Node(2)
+        s2.left = 0; s2.right = 10; s2.node = argbook.Node( 2 )
         s1.prev = s2; s2.next = s1
         s1.defrag_segment_chain()
         self.assertEqual(s2.right, 20)
@@ -81,9 +79,9 @@ class TestSegment(unittest.TestCase):
     def test_get_first_segment(self):
         s1 = argbook.Segment(); s2 = argbook.Segment()
         s1.samples.update({k:k for k in [0, 1,2]})
-        s1.left = 10; s1.right = 20; s1.node = argbook.Node(2)
+        s1.left = 10; s1.right = 20; s1.node = argbook.Node( 2 )
         s2.samples.update({k:k for k in [0, 1]})
-        s2.left =0; s2.right = 4; s2.node = argbook.Node(2)
+        s2.left =0; s2.right = 4; s2.node = argbook.Node( 2 )
         s1.prev = s2; s2.next = s1
         self.assertEqual(s1.get_first_segment().left, 0)
         self.assertEqual(s1.get_first_segment().right, 4)
@@ -92,7 +90,7 @@ class TestSegment(unittest.TestCase):
 class TestNode(unittest.TestCase):
 
     def test_contains(self):
-        node = argbook.Node(2)
+        node = argbook.Node( 2 )
         s1 = argbook.Segment(); s2 = argbook.Segment()
         s1.left = 10; s1.right = 20; s1.node = node
         s2.left = 0; s2.right = 10; s2.node = node
@@ -109,7 +107,7 @@ class TestNode(unittest.TestCase):
         self.assertRaises(ValueError, node.x_segment,25)
 
     def test_num_links(self):
-        node = argbook.Node(2)
+        node = argbook.Node( 2 )
         s1 = argbook.Segment(); s2 = argbook.Segment()
         s1.left = 10; s1.right = 20; s1.node = node
         s2.left = 0; s2.right = 5; s2.node = node
@@ -119,7 +117,7 @@ class TestNode(unittest.TestCase):
         self.assertNotEqual(node.num_links(), 20)
 
     def test_equal(self):
-        node1 = argbook.Node(2)
+        node1 = argbook.Node( 2 )
         s1 = argbook.Segment(); s2 = argbook.Segment()
         s1.samples.update({k:k for k in [0, 1,2]})
         s1.left = 10; s1.right = 20; s1.node = node1
@@ -127,7 +125,7 @@ class TestNode(unittest.TestCase):
         s2.left = 0; s2.right = 5; s2.node = node1
         s1.prev = s2; s2.next = s1
         node1.first_segment = s2
-        node2 = argbook.Node(2)
+        node2 = argbook.Node( 2 )
         s3 = argbook.Segment(); s4 = argbook.Segment()
         s3.samples.update({k:k for k in [0, 1,2]})
         s3.left = 10; s3.right = 20; s3.node = node2
@@ -149,7 +147,7 @@ class TestNode(unittest.TestCase):
         self.assertRaises(ValueError, node2.equal, node3)
         #-------snps
 
-        node4 = argbook.Node(2)
+        node4 = argbook.Node( 2 )
         s3 = argbook.Segment(); s4 = argbook.Segment()
         s3.samples.update({k:k for k in [0, 1,2]})
         s3.left = 10; s3.right = 20; s3.node = node4
@@ -172,7 +170,7 @@ class TestNode(unittest.TestCase):
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
         # print(ts_full.tables.edges)
         # print(ts_full.tables.nodes.time)
-        tsarg= treeSequence.TreeSeq(ts_full)
+        tsarg= treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
         #-------------- the age of node 2 at position 10 ---- easy
@@ -208,7 +206,7 @@ class TestTreeSeq(unittest.TestCase):
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
 
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
         ##----- ts.edges dict
@@ -285,7 +283,7 @@ class TestTreeSeq(unittest.TestCase):
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
 
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
         def verify_mutation_node(node, data):
@@ -304,7 +302,7 @@ class TestTreeSeq(unittest.TestCase):
                 # assert node samples contain all the derived for snp x.
                 assert sorted(node_samples) == sorted(data[x])
 
-        data = treeSequence.get_arg_genotype(ts_full)
+        data = treeSequence.get_arg_genotype( ts_full )
         # print(data)
         for node in argnode.nodes.values():
             verify_mutation_node(node, data)
@@ -318,7 +316,7 @@ class TestARG(unittest.TestCase):
         length = 6e2
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         arg = tsarg.arg
         manual_leaves = [i for i in  range(sample_size)]
@@ -337,10 +335,10 @@ class TestARG(unittest.TestCase):
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
 
-        tsarg= treeSequence.TreeSeq(ts_full)
+        tsarg= treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
-        data = treeSequence.get_arg_genotype(ts_full)
+        data = treeSequence.get_arg_genotype( ts_full )
 
         # put some mutations on some nodes
         argnode[6].snps.__setitem__(101, 101)
@@ -406,7 +404,7 @@ class TestARG(unittest.TestCase):
         length = 6e2
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
         r = 0.1
@@ -473,7 +471,7 @@ class TestARG(unittest.TestCase):
         length = 6e2
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
         true_total_branch_length =\
@@ -500,7 +498,7 @@ class TestARG(unittest.TestCase):
         length = 6e2
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
         self.assertEqual(set([key for key in argnode.rec.keys()]), set([7, 8, 10, 11]))
@@ -516,12 +514,12 @@ class TestARG(unittest.TestCase):
                                    length = length, mutation_rate = 1e-8,
                                     recombination_rate = recombination_rate,
                                    random_seed = 20, record_full_arg = True)
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         argnode = tsarg.arg
         argnode.dump(path = os.getcwd(),
                      file_name = 'pickle_out.arg')
-        loaded_arg = argbook.ARG().load(path = os.getcwd()+'/pickle_out.arg')
+        loaded_arg = argbook.ARG().load( path =os.getcwd() + '/pickle_out.arg' )
         for key in loaded_arg.nodes:
             self.assertEqual(argnode[key].index, loaded_arg[key].index)
             self.assertEqual(sorted(argnode[key].snps), sorted(loaded_arg[key].snps))
@@ -558,7 +556,7 @@ class TestARG(unittest.TestCase):
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
 
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         arg = tsarg.arg
         arg_copy= arg.copy()
@@ -572,7 +570,7 @@ class TestARG(unittest.TestCase):
         length = 6e2
         ts_full = msprime.simulate(sample_size = sample_size, Ne = Ne, length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate, random_seed = 20, record_full_arg = True)
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         arg = tsarg.arg
         tot_tmrca= arg.total_tmrca(length)
@@ -587,7 +585,7 @@ class TestARG(unittest.TestCase):
                                    length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate,
                                    random_seed = 20, record_full_arg = True)
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         arg = tsarg.arg
         allele_age= arg.allele_age()
@@ -601,7 +599,7 @@ class TestARG(unittest.TestCase):
                                    length = length, mutation_rate = 1e-8,
                             recombination_rate = recombination_rate,
                                    random_seed = 20, record_full_arg = True)
-        tsarg = treeSequence.TreeSeq(ts_full)
+        tsarg = treeSequence.TreeSeq( ts_full )
         tsarg.ts_to_argnode()
         arg = tsarg.arg
         all_recomb_events = arg.breakpoints()
@@ -618,9 +616,9 @@ class TestMCMC(unittest.TestCase):
         CA: (5, 6)-->   7,      t= 4.5
         '''
         arg = argbook.ARG()
-        arg.nodes[0] = argbook.Node(0); arg.nodes[0].first_segment = argbook.Segment()
-        arg.nodes[1] = argbook.Node(1); arg.nodes[1].first_segment = argbook.Segment()
-        arg.nodes[2] = argbook.Node(2); arg.nodes[2].first_segment = argbook.Segment()
+        arg.nodes[0] = argbook.Node( 0 ); arg.nodes[0].first_segment = argbook.Segment()
+        arg.nodes[1] = argbook.Node( 1 ); arg.nodes[1].first_segment = argbook.Segment()
+        arg.nodes[2] = argbook.Node( 2 ); arg.nodes[2].first_segment = argbook.Segment()
         arg.nodes[0].time = 0 ; arg.nodes[1].time = 0 ; arg.nodes[2].time = 0
         #--------- n = 3 , m=0 , seq length =10
         arg.nodes[0].first_segment.left = 0; arg.nodes[0].first_segment.right = 10
@@ -630,18 +628,18 @@ class TestMCMC(unittest.TestCase):
         arg.nodes[1].first_segment.samples.__setitem__(1, 1)
         arg.nodes[2].first_segment.samples.__setitem__(2, 2)
         #----rec on 2 at b= 5
-        arg.nodes[3] = argbook.Node(3); arg.nodes[3].first_segment = argbook.Segment()
+        arg.nodes[3] = argbook.Node( 3 ); arg.nodes[3].first_segment = argbook.Segment()
         arg.nodes[3].first_segment.left = 0; arg.nodes[3].first_segment.right = 5
         arg.nodes[3].left_child = arg.nodes[2]; arg.nodes[3].right_child = arg.nodes[2]
         arg.nodes[3].first_segment.samples.__setitem__(2, 2)
-        arg.nodes[4] = argbook.Node(4); arg.nodes[4].first_segment = argbook.Segment()
+        arg.nodes[4] = argbook.Node( 4 ); arg.nodes[4].first_segment = argbook.Segment()
         arg.nodes[4].first_segment.left = 5; arg.nodes[4].first_segment.right = 10
         arg.nodes[4].left_child = arg.nodes[2]; arg.nodes[4].right_child = arg.nodes[2]
         arg.nodes[4].first_segment.samples.__setitem__(2, 2)
         arg.nodes[2].left_parent = arg.nodes[3]; arg.nodes[2].right_parent = arg.nodes[4]
         arg.nodes[2].breakpoint = 5; arg.nodes[3].time = 1.5 ; arg.nodes[4].time = 1.5
         #------ CA (3,4 ) ---6
-        arg.nodes[6] = argbook.Node(6); arg.nodes[6].first_segment = argbook.Segment()
+        arg.nodes[6] = argbook.Node( 6 ); arg.nodes[6].first_segment = argbook.Segment()
         arg.nodes[6].first_segment.left = 0; arg.nodes[6].first_segment.right = 10
         arg.nodes[6].left_child = arg.nodes[3]; arg.nodes[6].right_child = arg.nodes[4]
         arg.nodes[6].first_segment.samples.__setitem__(2, 2)
@@ -649,7 +647,7 @@ class TestMCMC(unittest.TestCase):
         arg.nodes[3].left_parent = arg.nodes[6]; arg.nodes[3].right_parent = arg.nodes[6]
         arg.nodes[4].left_parent = arg.nodes[6]; arg.nodes[4].right_parent = arg.nodes[6]
         #-------- CA (0,1 ) ---> 5
-        arg.nodes[5] = argbook.Node(5); arg.nodes[5].first_segment = argbook.Segment()
+        arg.nodes[5] = argbook.Node( 5 ); arg.nodes[5].first_segment = argbook.Segment()
         arg.nodes[5].first_segment.left = 0; arg.nodes[5].first_segment.right = 10
         arg.nodes[5].left_child = arg.nodes[0]; arg.nodes[5].right_child = arg.nodes[1]
         arg.nodes[5].first_segment.samples.update({0:0, 1:1})
@@ -658,20 +656,20 @@ class TestMCMC(unittest.TestCase):
         arg.nodes[1].left_parent = arg.nodes[5]; arg.nodes[1].right_parent = arg.nodes[5]
 
         #--- CA (5, 6) ---7
-        arg.nodes[7] = argbook.Node(7); arg.nodes[7].first_segment = argbook.Segment()
+        arg.nodes[7] = argbook.Node( 7 ); arg.nodes[7].first_segment = argbook.Segment()
         arg.nodes[7].left_child = arg.nodes[5]; arg.nodes[7].right_child = arg.nodes[6]
         arg.nodes[7].time = 4.5
         arg.nodes[5].left_parent = arg.nodes[7]; arg.nodes[5].right_parent = arg.nodes[7]
         arg.nodes[6].left_parent = arg.nodes[7]; arg.nodes[6].right_parent = arg.nodes[7]
         #-------
-        mcmc = MC.MCMC()
+        mcmc = MC.MCMC(ts_full='test')
         mcmc.arg = arg
         mcmc.arg.coal.update({5:5, 6:6 , 7:7})
         mcmc.arg.rec.update({3:3, 4:4 })
         mcmc.data = {}
         mcmc.n = 3
         mcmc.m = 0
-        mcmc. seq_length = 10
+        mcmc.seq_length = 10
         # mcmc.print_state()
         # -- - - - -
         detach = mcmc.arg.nodes[6]

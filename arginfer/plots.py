@@ -64,6 +64,40 @@ class plot_summary(Figure):
         self.save(figure_name="summary" + time.strftime("%Y%m%d-%H%M%S"))
         plt.show()
 
+class Trace(Figure):
+    name = "summary"
+    def arginfer_trace(self,  true_values= False):
+        df = self.data
+        if true_values:
+            truth =  self.load_true_values()
+            true_branch_length = truth[3]
+            true_anc_recomb= truth[4]
+            true_nonanc_rec = truth[5]
+        fig = plt.figure()
+        fig.subplots_adjust(hspace = 0.35, wspace = 0.6)
+        for i,  d in zip(range(4), ["posterior", "branch length",
+                                    "ancestral recomb", "non ancestral recomb"]):
+            fig.add_subplot(2, 2, i+1)
+            df = self.data[d]
+            plt.plot(df)
+            plt.ticklabel_format(style='sci',scilimits=(0,0),axis='y')# (0,0) includes all
+            if true_values:
+                plt.axhline(y= truth[i+2], color="r", linestyle = "--", lw= 1)
+            plt.ylabel(d)
+            if i>1:
+                plt.xlabel("Iteration")
+        fig.suptitle("Iter = " +str(int(self.data.setup[0]/1000)) + "K "+", thin = "+\
+            str(int(self.data.setup[1]))+ " "+", burn: "+ str(int(self.data.setup[2]))+\
+            ", n= " + str(int(self.data.setup[3]))+", Ne = "+ str(int(self.data.setup[6]/1000))  +\
+                     "K,\n L= "+ str(int(self.data.setup[4]/1000))+\
+            "K, m= " + str(int(self.data.setup[5]))+ ", accept= "+ str(self.data.setup[9])+\
+            ", CPU time = " + str(int(self.data.setup[10]/60))+ " min\n" +
+                     "detail accept: ["+ str(self.data.setup[11]) +", " + str(self.data.setup[12])+ ", " +
+                     str(self.data.setup[13]) + ", "+ str(self.data.setup[14])+ ", "
+                     + str(self.data.setup[15])+ " ,"+ str(self.data.setup[16]) +\
+                     " ,"+ str(self.data.setup[17])+"]")
+        self.save(figure_name="arginfertrace" + time.strftime("%Y%m%d-%H%M%S"))
+        plt.show()
 
 
 

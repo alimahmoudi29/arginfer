@@ -17,10 +17,9 @@ import time
 import random
 import msprime
 from operator import itemgetter
-from treeSequence import get_arg_genotype
-import argbook
-from argbook import *
-
+from arginfer.treeSequence import get_arg_genotype
+from arginfer import argbook
+from arginfer.argbook import *
 
 class Initial(object):
 
@@ -59,11 +58,11 @@ class Initial(object):
     def generate_time(self):
         c=1
         self.number_of_lineages = len(self.P)
-        print("self.number_of_lineages", self.number_of_lineages)
+        # print("self.number_of_lineages", self.number_of_lineages)
         coal_rate = (self.number_of_lineages * (self.number_of_lineages - 1)
                     / (4*self.Ne))
         rec_rate = (self.number_of_links/c * (self.r))
-        print("self.-------------------number_of_links", self.number_of_links)
+        # print("self.-------------------number_of_links", self.number_of_links)
         tot_rate = coal_rate + rec_rate
         if self.next_event:
             self.t += random.expovariate(tot_rate)
@@ -345,7 +344,7 @@ class Initial(object):
                 self.merge_event()
             else:
                 count+=1
-                print("recombination number", count)
+                # print("recombination number", count)
                 self.recombination_event()
         assert self.remaining_SNPs.is_empty
         assert self.number_of_links == 0

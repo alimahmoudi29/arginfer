@@ -1,34 +1,52 @@
-from mcmc import *
+import sys
+import os
+import arginfer
 import argparse
-from plots import *
-import comparison.plot
-
+import logging
+import msprime
+from arginfer.mcmc import *
+from arginfer.plots import *
+# import comparison.plot
 '''
-simulation: 
-python3 main.py -I 10000 --thin 20 --burn 0 -n 5 -L 1e3  --Ne 5000 -r 1e-8 -mu 1e-8 \
-        --tsfull /Users/amahmoudi/Ali/phd/github_projects/mcmc/test1/ts_sim/sim_r1/n5Ne5K_L1K_iter0.args \
-        -O /Users/amahmoudi/Ali/phd/github_projects/mcmc/ARGinfer/output \
-        --random-seed 5 -p -v --verify
-        
-real data: 
-python3 main.py -I 30 --thin 0 --burn 0 -n 10 -L 1e5  --Ne 5000 -r 1e-8 -mu 1e-8 \
-        --input_path /Users/amahmoudi/Ali/phd/github_projects/real_data/qced_data \
-        --haplotype_name "haplotype_ready.txt" \
-        --ancAllele_name "ancestral_allele_ready.txt" \
-        --snpPos_name "SNP_pos_ready.txt" \
-        -O /Users/amahmoudi/Ali/phd/github_projects/mcmc/ARGinfer/output \
-        --random-seed 5 -p -v --verify
+command line interface for arginfer
 '''
+logger = logging.getLogger(__name__)
+log_format = "%(asctime)s %(levelname)s %(message)s"
 
-def add_arguments(parser):
+def error_exit(message):
+    """
+    Exit with the specified error message, setting error status.
+    """
+    sys.exit("{}: {}".format(sys.argv[0], message))
+def setup_logging(args):
+    log_level = "WARN"
+    if args.verbose:
+        log_level = "DEBUG"#"INFO"
+    logging.basicConfig(level=log_level, format=log_format)
+
+def add_arguments():
+    high_parser = argparse.ArgumentParser(prog="arginfer",
+        description="This is the command line interface for arginfer, "
+                    "a probabilistic method to infer the Ancestral Recombination Graph.")
+    high_parser.add_argument(
+        "-V", "--version", action="version", version=f"%(prog)s {arginfer.__version__}")
+    subparsers = high_parser.add_subparsers(dest="subcommand")
+    subparsers.required = True
+    parser = subparsers.add_parser(
+        "infer",
+        help=(
+            "Takes the data or the ARG in tree sequence full_ARG format and "
+            "returns MCMC sampled ARGs."
+        ),
+    )
     parser.add_argument('--tsfull', type=argparse.FileType('r', encoding='UTF-8'), default=None,
-                                            help='an msprime .srgs file.'
-                                                 ' If none, simulate one with defaults')
+                                            help='an msprime .args file.'
+                                                 ' If None, build an ARG from haplotype data')
     parser.add_argument('--input_path',type=str,
                         default=os.getcwd()+"/data", help='The path to input data, '
                                     'this is the path to haplotype, ancestral allele, and snp_pos ')
     parser.add_argument('--haplotype_name' , type = str,
-                        default= "haplotype_ready.txt", help='the haplotype file name',
+                        default= None, help='the haplotype file name',#"haplotype_ready.txt"
                         required=False)
     parser.add_argument('--ancAllele_name' , type = str,
                         default= "ancestral_allele_ready.txt",
@@ -53,9 +71,11 @@ def add_arguments(parser):
                         default=os.getcwd()+"/output", help='The output path')
     parser.add_argument( '-p','--plot', help="plot the output", action="store_true")
     parser.add_argument("--random-seed", "-s", type = int, default=1)
-    parser.add_argument(
-            "-v", "--verbose", help="increase output verbosity", action="store_true")
+    parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
     parser.add_argument( "--verify", help="verify the output ARG", action="store_true")
+    parser.set_defaults(runner=run_mcmc)
+    #if you need any other subparsers, they are added here
+    return high_parser
 
 def run_mcmc(args):
     input_data_path = args.input_path
@@ -86,20 +106,20 @@ def run_mcmc(args):
                  snpPos_data_name, outpath, args.verbose)
     mcmc.run(iteration, thin, burn, args.verify)
     if args.plot:
-        p= comparison.plot.Trace(outpath, name= "summary")
+        # p= comparison.plot.Trace(outpath, name= "summary")
+        p= Trace(outpath)
         p.arginfer_trace()
-    if args.plot:
-        p = plot_summary(outpath)
-        p.plot()
+    # if args.plot:
+    #     p = plot_summary(outpath)
+    #     p.plot()
     if args.verbose:
         mcmc.print_state()
 
-def main():
-    parser = argparse.ArgumentParser(prog="arginfer",
-                                     description='sample from the ARG')
-    add_arguments(parser)
-    args = parser.parse_args()
-    run_mcmc(args)
-
-if __name__=='__main__':
-    main()
+def arginfer_main(arg_list=None):
+    parser = add_arguments()
+    args = parser.parse_args(arg_list)
+    setup_logging(args)
+    args.runner(args)
+    # run_mcmc(args)
+# if __name__=='__main__':
+#     arginfer_main()

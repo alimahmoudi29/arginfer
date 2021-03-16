@@ -1,28 +1,15 @@
-''' This module is responsible for the mcmc:
-branch1: if the new rejected, we revert the
-current ARG by backtracking all the changes
-This module: copy the current ARG'''
-
-import treeSequence
-
-import pandas as pd
-import numpy as np
-
+''' This module is responsible for the mcmc '''
+import arginfer.treeSequence as treeSequence
 import copy
 from tqdm import tqdm
 import sys
 import os
 import shutil
-
+from arginfer.initialARG import *
 
 # for recursion issue
 # print("current recursion limit is ", sys.getrecursionlimit())
 sys.setrecursionlimit(500000)
-
-import gc
-
-from argbook import *
-from initialARG import *
 
 class TransProb(object):
     '''transition probability calculation'''
@@ -128,7 +115,7 @@ class MCMC(object):
     def __init__(self, ts_full = None, sample_size = 5, Ne =5000, seq_length= 3e5, mutation_rate=1e-8,
                  recombination_rate=1e-8,
                  input_data_path = '',
-                 haplotype_data_name = '',
+                 haplotype_data_name = None,
                  ancAllele_data_name='',
                  snpPos_data_name='',
                  outpath = os.getcwd()+"/output", verbose=False):
@@ -240,10 +227,11 @@ class MCMC(object):
         '''
         TODO: build an ARG for the given data.
         '''
-        if self.ts_full == None:
+        if self.haplotype_data_name != None:
+            print("ITIS SISIISIISISISISIG ", self.haplotype_data_name)
             #real data
             self.read_convert_data()
-        else:
+        else: # 'test' is for test in tests/
             ts_full= self.ts_full
             tsarg = treeSequence.TreeSeq(ts_full)
             tsarg.ts_to_argnode()
@@ -261,6 +249,7 @@ class MCMC(object):
                                                   self.arg.num_ancestral_recomb,
                                                  self.arg.num_nonancestral_recomb,
                                                   self.mu, self.r, self.Ne])
+
         #-----initial
         init= Initial(self.data, self.n, self.seq_length,
                      self.Ne, self.mu, self.r)

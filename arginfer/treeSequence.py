@@ -1,17 +1,14 @@
 """
 Tree sequence conversion to ARGnode
 """
-import sys
 import random
-import argparse
 import numpy as np
-import pandas as pd
 import bintrees
 import collections
 import msprime
 import math
+from arginfer import argbook
 
-import argbook
 
 class TreeSeq(object):
     """

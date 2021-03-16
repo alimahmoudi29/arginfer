@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 
 class Segment(object):
-
     """
     A class representing a single segment. Each segment has a left and right, denoting
     the loci over which it spans, a node giving the node to which it belongs in an ARG,
