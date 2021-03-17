@@ -3,6 +3,7 @@
 # This file only contains a selection of the most common options. For a full
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
+import pkg_resources
 
 # -- Path setup --------------------------------------------------------------
 
@@ -10,10 +11,12 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath('../..'))# grant parent path
 
+# The master document
+master_doc = "index"
 
 # -- Project information -----------------------------------------------------
 
@@ -21,6 +24,15 @@ project = 'arginfer'
 copyright = '2021, Ali Mahmoudi'
 author = 'Ali Mahmoudi'
 
+# The full version, including alpha/beta/rc tags
+try:
+    from setuptools_scm import get_version
+
+    release = get_version(root="../..", relative_to=__file__)
+    version = release[:3]
+except pkg_resources.DistributionNotFound:
+    release = "0.0.0"
+    version = "0.0.0"
 
 # -- General configuration ---------------------------------------------------
 
@@ -28,6 +40,11 @@ author = 'Ali Mahmoudi'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.intersphinx",
+    "sphinxarg.ext",
+    "sphinx_issues",
+    "recommonmark",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -43,7 +60,7 @@ language = 'English'
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -51,7 +68,7 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = 'sphinx_rtd_theme'#'alabaster'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
