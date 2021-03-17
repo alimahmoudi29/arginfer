@@ -1,11 +1,20 @@
 # ARGinfer
- Inferring Ancestral Recombination Graph (ARG)
 
+[![Documentation Status](https://readthedocs.org/projects/arginfer/badge/?version=latest)](https://arginfer.readthedocs.io/en/latest/?badge=latest)
+
+``arginfer`` is a probabilistic method for inferring the
+Ancestral Recombination Graph (ARG). The method uses a Markov chain
+Monte Carlo (MCMC) and samples from the posterior distribution of ARGs
+under the coalescent with recombination prior and infinite sites model of mutations.
+
+Please refer to the [documentation](https://tsdate.readthedocs.io/en/latest/) 
+for information on installing and using the software.
+<!--
 # Quick Run
 The following command can be used to run 1000 MCMC iterations with
-burn-in 200 and retaining every 20 samples (```thining = 20```).
- Also ```n``` is the number of sequences each ```L = 1e5``` in length
- evolving in a population of effective size ```Ne = 5000```, with
+burn-in 200 and retaining every 20 samples (`thining = 20`).
+ Also `n` is the number of sequences each `L = 1e5` in length
+ evolving in a population of effective size `Ne = 5000`, with
  mutation rate 1e-8 mutations/generation/site and recombination rate
  1e-8 recombinations/generation/site.
 
@@ -21,4 +30,4 @@ python3 main.py \
  The output will be stored in the given path "output/out1". If "--plot"
  is given, the trace plot will be stored in the output path in a "pdf"
  format.
-
+-->
