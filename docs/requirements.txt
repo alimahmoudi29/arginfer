@@ -1,0 +1,10 @@
+attrs
+six
+sphinx==3.5.2
+setuptools_scm
+sphinx-argparse
+sphinx_rtd_theme
+sphinx_issues
+scipy
+tqdm
+appdirs

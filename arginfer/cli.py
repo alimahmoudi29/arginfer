@@ -24,7 +24,7 @@ def setup_logging(args):
         log_level = "DEBUG"#"INFO"
     logging.basicConfig(level=log_level, format=log_format)
 
-def add_arguments():
+def arginfer_cli_parser():
     high_parser = argparse.ArgumentParser(prog="arginfer",
         description="This is the command line interface for arginfer, "
                     "a probabilistic method to infer the Ancestral Recombination Graph.")
@@ -116,7 +116,7 @@ def run_mcmc(args):
         mcmc.print_state()
 
 def arginfer_main(arg_list=None):
-    parser = add_arguments()
+    parser = arginfer_cli_parser()
     args = parser.parse_args(arg_list)
     setup_logging(args)
     args.runner(args)
