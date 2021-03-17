@@ -5,6 +5,14 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 import pkg_resources
 
+autodoc_mock_imports = [
+    "numpy",
+    "tqdm",
+    "appdirs",
+    "scipy",
+    "scipy.stats",
+    "scipy.special",
+]
 # -- Path setup --------------------------------------------------------------
 
 # If extensions (or modules to document with autodoc) are in another directory,
