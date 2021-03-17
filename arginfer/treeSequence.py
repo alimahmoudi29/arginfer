@@ -9,7 +9,6 @@ import msprime
 import math
 from arginfer import argbook
 
-
 class TreeSeq(object):
     """
     convert tree sequences (ts_full) to Node data structure, and vice versa
