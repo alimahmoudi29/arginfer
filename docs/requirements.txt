@@ -9,6 +9,5 @@ scipy
 sortedcontainers
 bintrees
 matplotlib
-pickle
 tqdm
 appdirs

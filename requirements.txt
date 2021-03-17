@@ -6,7 +6,6 @@ msprime
 argparse
 tqdm
 matplotlib
-pickle
 random
 copy
 unittest
