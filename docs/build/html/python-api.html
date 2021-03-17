@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Python API &mdash; arginfer 0.1.dev58+g35db308.d20210317 documentation</title>
+  <title>Python API &mdash; arginfer 0.1.dev61+g783d642.d20210317 documentation</title>
   
 
   
@@ -162,6 +162,38 @@
 <p>This page provides documentation for the <code class="docutils literal notranslate"><span class="pre">arginfer</span></code> Python API.</p>
 <div class="section" id="running-arginfer">
 <h2>Running arginfer<a class="headerlink" href="#running-arginfer" title="Permalink to this headline">¶</a></h2>
+<dl class="py function">
+<dt id="arginfer.infer_sim">
+<code class="sig-prename descclassname"><span class="pre">arginfer.</span></code><code class="sig-name descname"><span class="pre">infer_sim</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ts_full</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">iteration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">burn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">Ne</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seq_length</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60000.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mutation_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">recombination_rate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outpath</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/Users/amahmoudi/Ali/phd/github_projects/mcmc/arginfer/docs/output'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verify</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#arginfer.infer_sim" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes <cite>msprime</cite>  tree sequence with <cite>record_full_arg= True</cite> and
+- converts tree_sequence to <cite>Augmented Tree Sequence (ATS)</cite> format.
+- calculates true likelihood/ prior/ branch length / the number of ancestral and non-ancestral
+recombinations and returns them at  <cite>outpath+&quot;/true_values.npy</cite>
+- runs the mcmc and returns samples of ARGs from their posterior.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ts_full</strong> -- <cite>msprime</cite> tree sequence with <cite>record_full_arg= True</cite>.</p></li>
+<li><p><strong>sample_size</strong> (<em>int</em>) -- The number of sampled genomes.</p></li>
+<li><p><strong>iteration</strong> (<em>int</em>) -- The number of MCMC iterations. Must be <cite>&gt;20</cite>. The default = <cite>100</cite></p></li>
+<li><p><strong>thin</strong> (<em>int</em>) -- This specifies how often to write ARG samples to file. By default, the ARG is written every <cite>10</cite> iterations after <cite>burn-in</cite>.</p></li>
+<li><p><strong>burn</strong> (<em>int</em>) -- This specifies how many ARGs to discard as <cite>burn-in</cite>. Default is <cite>0</cite>.</p></li>
+<li><p><strong>Ne</strong> (<em>float</em>) -- The effective (diploid) population size for the population. This defaults to <cite>5000</cite> if not specified.</p></li>
+<li><p><strong>seq_length</strong> (<em>float</em>) -- The length of the sequences in bases.This defaults to <cite>6e4</cite> if not specified.</p></li>
+<li><p><strong>mutation_rate</strong> (<em>float</em>) -- The rate of mutation per base per generation. This defaults to <cite>1e-8</cite> if not specified.</p></li>
+<li><p><strong>recombination_rate</strong> (<em>float</em>) -- The rate of recombination per base per generation. This defaults to <cite>1e-8</cite> if not specified.</p></li>
+<li><p><strong>outpath</strong> -- The path to store the outputs. This defaults to <cite>./output</cite> if not specified.</p></li>
+<li><p><strong>plot</strong> (<em>bool</em>) -- plots the trace plots if <cite>True</cite></p></li>
+<li><p><strong>verbose</strong> (<em>bool</em>) -- verbose.</p></li>
+<li><p><strong>verify</strong> (<em>bool</em>) -- for debugging purposes. Checks if the ARG is a valid ATS.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>None. inferred ARGs are stored in  <cite>outpath</cite>.</p>
+</dd>
+</dl>
+</dd></dl>
+
 </div>
 </div>
 

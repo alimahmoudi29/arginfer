@@ -3015,24 +3015,22 @@ def infer_sim(
         verify= False
 ):
     """
-    Takes `msprime` tree sequence with `record_full_arg= True` and
-         - converts tree_sequence to `Augmented Tree Sequence (ATS)` format.
-         - calculates true likelihood/ prior/ branch length / the number of ancestral and non-ancestral
-            recombinations and returns them at  `outpath+"/true_values.npy`
-         - runs the mcmc and returns samples of ARGs from their posterior.
+
+    Takes `msprime`  tree sequence with `record_full_arg= True` and
+    - converts tree_sequence to `Augmented Tree Sequence (ATS)` format.
+    - calculates true likelihood/ prior/ branch length / the number of ancestral and non-ancestral
+    recombinations and returns them at  `outpath+"/true_values.npy`
+    - runs the mcmc and returns samples of ARGs from their posterior.
+
     :param ts_full: `msprime` tree sequence with `record_full_arg= True`.
     :param int sample_size: The number of sampled genomes.
     :param int iteration: The number of MCMC iterations. Must be `>20`. The default = `100`
-    :param int thin: This specifies how often to write ARG samples to file.
-        By default, the ARG is written every `10` iterations after `burn-in`.
+    :param int thin: This specifies how often to write ARG samples to file. By default, the ARG is written every `10` iterations after `burn-in`.
     :param int burn: This specifies how many ARGs to discard as `burn-in`. Default is `0`.
-    :param float Ne: The effective (diploid) population size for the population.
-            This defaults to `5000` if not specified.
-    :param float seq_length:The length of the sequences in bases.This defaults to `6e4` if not specified.
-    :param float mutation_rate: The rate of mutation per base per generation.
-            This defaults to `1e-8` if not specified.
-    :param float recombination_rate: The rate of recombination per base per generation.
-            This defaults to `1e-8` if not specified.
+    :param float Ne: The effective (diploid) population size for the population. This defaults to `5000` if not specified.
+    :param float seq_length: The length of the sequences in bases.This defaults to `6e4` if not specified.
+    :param float mutation_rate: The rate of mutation per base per generation. This defaults to `1e-8` if not specified.
+    :param float recombination_rate: The rate of recombination per base per generation. This defaults to `1e-8` if not specified.
     :param outpath: The path to store the outputs. This defaults to `./output` if not specified.
     :param bool plot: plots the trace plots if `True`
     :param bool verbose: verbose.
