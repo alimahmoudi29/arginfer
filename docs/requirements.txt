@@ -6,6 +6,7 @@ sphinx-argparse
 sphinx_rtd_theme
 sphinx_issues
 scipy
+pandas
 sortedcontainers
 bintrees
 matplotlib
