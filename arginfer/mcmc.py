@@ -6,7 +6,7 @@ import sys
 import os
 import shutil
 from arginfer.initialARG import *
-
+from arginfer.plots import *
 # for recursion issue
 # print("current recursion limit is ", sys.getrecursionlimit())
 sys.setrecursionlimit(500000)
@@ -228,7 +228,6 @@ class MCMC(object):
         TODO: build an ARG for the given data.
         '''
         if self.haplotype_data_name != None:
-            print("ITIS SISIISIISISISISIG ", self.haplotype_data_name)
             #real data
             self.read_convert_data()
         else: # 'test' is for test in tests/
@@ -2181,128 +2180,6 @@ class MCMC(object):
                 valid = False
         return valid
 
-    # def new_recombination1(self, t):
-    #     '''
-    #     The new event is a recomb at t
-    #     1. choose a lineage to put the rec on from
-    #         self.floats and self.partial_floatings,
-    #         proportional to their num of links
-    #     2. if a floating is chosen, randomly choose a breakpoint
-    #             it and split to two and put both parents in self.floats
-    #         Else: it is from a partial floating,
-    #             choose a breakpoint randomly from the new sites (a', a), (b, b')
-    #             split the lineage to two. The parent with all new sites will
-    #             float and the other follows the child path.
-    #     '''
-    #     valid = True
-    #     partial_links = [self.partial_floatings[item][2] for item in self.partial_floatings]
-    #     partial_keys = list(self.partial_floatings.keys())
-    #     float_keys = list(self.floats.keys())
-    #     float_links  = [self.arg.__getitem__(item).num_links() for item in float_keys]
-    #     partial_links.extend(float_links)
-    #     partial_keys.extend(float_keys)
-    #     assert sum(partial_links) == self.active_links
-    #     child_ind = random.choices(partial_keys, partial_links)[0]
-    #     if self.floats.__contains__(child_ind):
-    #         child = self.arg.__getitem__(child_ind)
-    #         # choose a breakpoint on child
-    #         head = child.first_segment
-    #         tail = child.get_tail()
-    #         if tail.right - head.left>1:
-    #             break_point = random.choice(range(head.left + 1,
-    #                                               tail.right))
-    #             leftparent, rightparent = self.split_node(child, break_point, t)
-    #             assert leftparent.get_tail().right <= break_point
-    #             assert break_point <= rightparent.first_segment.left
-    #             self.floats.discard(child_ind)
-    #             self.floats[leftparent.index] = leftparent.index
-    #             self.floats[rightparent.index] = rightparent.index
-    #             self.need_to_visit.discard(child_ind)
-    #             self.need_to_visit[leftparent.index] = leftparent.index
-    #             self.need_to_visit[rightparent.index] = rightparent.index
-    #             self.active_links -= (child.num_links() - leftparent.num_links())
-    #             self.active_links += rightparent.num_links()
-    #         else:
-    #             valid = False
-    #     else: # rec on one of the partials
-    #         assert self.partial_floatings.__contains__(child_ind)
-    #         ch = self.partial_floatings.pop(child_ind)
-    #         if ch[2]>1:
-    #             bp = random.choice(range(ch[2]))
-    #             child = self.arg.__getitem__(child_ind)
-    #             head = child.first_segment
-    #             tail = child.get_tail()
-    #             a = ch[0]
-    #             b = ch[1]
-    #             oldleftparent = child.left_parent
-    #             oldrightparent = child.right_parent
-    #             oldbreakpoint = child.breakpoint
-    #             assert self.original_interval.__contains__(child.index)
-    #             old_interval = self.original_interval.pop(child.index)
-    #             old_left = old_interval[0]
-    #             old_right = old_interval[1]
-    #             if a != None and b != None:
-    #                 assert a == old_left and b == old_right
-    #                 assert ch[2] == (a - head.left) + (tail.right - b)
-    #                 if bp < a - head.left:
-    #                     # the left parent is floating
-    #                     break_point = head.left + bp + 1
-    #                     assert break_point <= old_left or old_right <= break_point
-    #                     assert head.left < break_point <= a
-    #                     leftparent, rightparent = self.split_node(child, break_point, t)
-    #                     assert leftparent.get_tail().right <= break_point
-    #                     assert break_point <= rightparent.first_segment.left
-    #                     self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-    #                                         leftparent, rightparent, old_left, old_right, ch)
-    #                 else:
-    #                     #right parent is floating
-    #                     break_point = bp - (a- head.left) +b
-    #                     assert b<= break_point < tail.right
-    #                     assert break_point <= old_left or old_right <= break_point
-    #                     leftparent, rightparent = self.split_node(child, break_point, t)
-    #                     assert leftparent.get_tail().right <= break_point
-    #                     assert break_point <= rightparent.first_segment.left
-    #                     self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-    #                                             rightparent, leftparent, old_left, old_right, ch)
-    #             elif a!= None:
-    #                 break_point = head.left + bp + 1
-    #                 assert tail.right - head.left -1 == ch[2] or old_left- head.left == ch[2]
-    #                 assert break_point <= old_left or old_right <= break_point
-    #                 # assert head.left < break_point <= a
-    #                 leftparent, rightparent = self.split_node(child, break_point, t)
-    #                 assert leftparent.get_tail().right <= break_point
-    #                 assert break_point <= rightparent.first_segment.left
-    #                 # choose which one to float
-    #                 if head.left< old_left and old_left< tail.right: # case 3 in notebook
-    #                     self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-    #                        leftparent, rightparent, old_left, old_right, ch)
-    #                 elif (head.left < old_left and tail.right<= old_left) or \
-    #                         (old_right <= head.left and old_right < tail.right):# case 5, 8, 4, 7
-    #                     if random.random() < 0.5:# leftparent is floating
-    #                         self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-    #                             leftparent, rightparent, old_left, old_right, ch)
-    #                     else:#right parent is floating
-    #                         self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-    #                             rightparent, leftparent, old_left, old_right, ch)
-    #                 else:
-    #                     raise ValueError("the new interval violates the vaild cases")
-    #             elif b!= None:
-    #                 #right parent is floating
-    #                 assert tail.right - old_right == ch[2]
-    #                 break_point = bp + b
-    #                 assert break_point <= old_left or old_right <= break_point
-    #                 assert b<= break_point < tail.right
-    #                 leftparent, rightparent = self.split_node(child, break_point, t)
-    #                 assert leftparent.get_tail().right <= break_point
-    #                 assert break_point <= rightparent.first_segment.left
-    #                 self.make_float(child, oldbreakpoint, oldleftparent, oldrightparent,
-    #                             rightparent, leftparent, old_left, old_right, ch)
-    #             else:
-    #                 raise ValueError("both a and b are None")
-    #         else:
-    #             valid = False
-    #     return valid
-
     def coal_bothF(self, t):
         '''
         coalescence of two floating lineages at t
@@ -3122,6 +2999,99 @@ class MCMC(object):
                               node.snps, s.samples, sep="\t")
                     s = s.next
 
+def infer_sim(
+        ts_full,
+        sample_size,
+        iteration = 100,
+        thin = 20,
+        burn = 0,
+        Ne =5000,
+        seq_length= 6e4,
+        mutation_rate=1e-8,
+        recombination_rate=1e-8,
+        outpath = os.getcwd()+"/output",
+        plot= True,
+        verbose=False,
+        verify= False
+):
+    """
+    Takes `msprime` tree sequence with `record_full_arg= True` and
+         - converts tree_sequence to `Augmented Tree Sequence (ATS)` format.
+         - calculates true likelihood/ prior/ branch length / the number of ancestral and non-ancestral
+            recombinations and returns them at  `outpath+"/true_values.npy`
+         - runs the mcmc and returns samples of ARGs from their posterior.
+    :param ts_full: `msprime` tree sequence with `record_full_arg= True`.
+    :param int sample_size: The number of sampled genomes.
+    :param int iteration: The number of MCMC iterations. Must be `>20`. The default = `100`
+    :param int thin: This specifies how often to write ARG samples to file.
+        By default, the ARG is written every `10` iterations after `burn-in`.
+    :param int burn: This specifies how many ARGs to discard as `burn-in`. Default is `0`.
+    :param float Ne: The effective (diploid) population size for the population.
+            This defaults to `5000` if not specified.
+    :param float seq_length:The length of the sequences in bases.This defaults to `6e4` if not specified.
+    :param float mutation_rate: The rate of mutation per base per generation.
+            This defaults to `1e-8` if not specified.
+    :param float recombination_rate: The rate of recombination per base per generation.
+            This defaults to `1e-8` if not specified.
+    :param outpath: The path to store the outputs. This defaults to `./output` if not specified.
+    :param bool plot: plots the trace plots if `True`
+    :param bool verbose: verbose.
+    :param bool verify: for debugging purposes. Checks if the ARG is a valid ATS.
+    :return: None. inferred ARGs are stored in  `outpath`.
+    """
+    if ts_full !=None:#else real data
+        try:
+            ts_full = msprime.load(ts_full.name) #trees is a fh
+        except AttributeError:
+            ts_full = msprime.load(ts_full)
+    else:
+        IOError("ts_full is required")
+    # random.seed(args.random_seed)
+    # np.random.seed(args.random_seed+1)
+    mcmc = MCMC(ts_full= ts_full,
+                sample_size= sample_size,
+                Ne=Ne,
+                seq_length= seq_length,
+                mutation_rate= mutation_rate,
+                recombination_rate=recombination_rate,
+                outpath= outpath,
+                verbose= verbose)
+    mcmc.run(iteration = iteration, thin= thin, burn= burn ,
+            verify = verify)
+    if plot:
+        p= Trace(outpath)
+        p.arginfer_trace()
+    if verbose:
+        mcmc.print_state()
+
+def infer_real(
+        sample_size = 5,
+        Ne =5000,
+        seq_length= 6e4,
+        mutation_rate=1e-8,
+        recombination_rate=1e-8,
+        input_data_path = '',
+        haplotype_data_name = None,
+        ancAllele_data_name='',
+        snpPos_data_name='',
+        outpath = os.getcwd()+"/output",
+        verbose=False
+):
+    """
+    :param sample_size:
+    :param Ne:
+    :param seq_length:
+    :param mutation_rate:
+    :param recombination_rate:
+    :param input_data_path:
+    :param haplotype_data_name:
+    :param ancAllele_data_name:
+    :param snpPos_data_name:
+    :param outpath:
+    :param verbose:
+    :return:
+    """
+    pass
 if __name__ == "__main__":
     pass
     mcmc = MCMC()

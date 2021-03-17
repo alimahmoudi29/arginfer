@@ -8,7 +8,8 @@ Python API
 This page provides documentation for the ``arginfer`` Python API.
 
 
-**************
+****************
 Running arginfer
-**************
+****************
 
+.. autofunction:: arginfer.infer_sim
