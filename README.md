@@ -7,7 +7,7 @@ Ancestral Recombination Graph (ARG). The method uses a Markov chain
 Monte Carlo (MCMC) and samples from the posterior distribution of ARGs
 under the coalescent with recombination prior and infinite sites model of mutations.
 
-Please refer to the [documentation](https://tsdate.readthedocs.io/en/latest/) 
+Please refer to the [documentation](https://arginfer.readthedocs.io/en/latest/) 
 for information on installing and using the software.
 <!--
 # Quick Run
