@@ -5,7 +5,6 @@ setuptools_scm
 sphinx-argparse
 sphinx_rtd_theme
 sphinx_issues
-tskit
 scipy
 tqdm
 appdirs
