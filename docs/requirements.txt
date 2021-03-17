@@ -6,6 +6,7 @@ sphinx-argparse
 sphinx_rtd_theme
 sphinx_issues
 scipy
+numpy==1.19.5
 pandas==1.1.5
 sortedcontainers
 bintrees
