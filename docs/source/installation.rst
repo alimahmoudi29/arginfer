@@ -8,7 +8,7 @@ To install ``arginfer`` simply run::
 
     $ pip install -i https://test.pypi.org/simple/ arginfer
 
-    or
+or::
 
     $ python3 -m pip install arginfer --user
 
