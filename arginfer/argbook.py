@@ -262,7 +262,7 @@ class Node(object):
                 return self.left_parent, block
             else:
                 return self.right_parent, block
-        else: # CA
+        else:#CA
             sib = self.sibling()
             #--- after spr before clean up, sib might be NAM
             if sib.first_segment != None and sib.contains(x):
@@ -756,7 +756,9 @@ class ARG(object):
         return node.time
 
     def total_tmrca(self, sequence_length):
-        '''return the tmrca of all the sites in the ARG'''
+        '''
+        return the tmrca of all the sites in the ARG
+        '''
         break_points = self.breakpoints(only_ancRec= True, set= True)
         break_points.add(0)
         break_points.add(sequence_length)

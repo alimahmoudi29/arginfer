@@ -15,7 +15,6 @@ Welcome to arginfer's documentation!
    cli
 
 
-
 Indices and tables
 ==================
 

@@ -2956,7 +2956,7 @@ class MCMC(object):
                                         round(self.detail_acceptance[5][1]/self.detail_acceptance[5][0], 2),
                                         round(self.detail_acceptance[6][1]/self.detail_acceptance[6][0], 2)]
             self.write_summary(write = True)
-        print("detail acceptance", self.detail_acceptance)
+        # print("detail acceptance", self.detail_acceptance)
 
     def print_state(self):
         print("self.arg.coal", self.arg.coal)
@@ -3009,7 +3009,7 @@ def infer_sim(
         seq_length= 6e4,
         mutation_rate=1e-8,
         recombination_rate=1e-8,
-        outpath = os.getcwd()+"/output",
+        outpath = "/output",
         plot= True,
         verbose=False,
         verify= False
@@ -3054,7 +3054,7 @@ def infer_sim(
                 recombination_rate=recombination_rate,
                 outpath= outpath,
                 verbose= verbose)
-    mcmc.run(iteration = iteration, thin= thin, burn= burn ,
+    mcmc.run(iteration = iteration, thin= thin, burn= burn,
             verify = verify)
     if plot:
         p= Trace(outpath)
@@ -3072,7 +3072,7 @@ def infer_real(
         haplotype_data_name = None,
         ancAllele_data_name='',
         snpPos_data_name='',
-        outpath = os.getcwd()+"/output",
+        outpath = "/output",
         verbose=False
 ):
     """

@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Tutorial &mdash; arginfer 0.1.dev73+g7f20b1f.d20210317 documentation</title>
+  <title>Tutorial &mdash; arginfer 0.1.dev78+g661dd04.d20210324 documentation</title>
   
 
   
@@ -89,6 +89,7 @@
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Tutorial</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#sampling-args">Sampling ARGs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#manipulating-arginfer-outputs">Manipulating <code class="docutils literal notranslate"><span class="pre">arginfer</span></code> outputs</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="python-api.html">Python API</a></li>
@@ -161,21 +162,76 @@
 <span id="sec-tutorial"></span><h1>Tutorial<a class="headerlink" href="#tutorial" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="sampling-args">
 <h2>Sampling ARGs<a class="headerlink" href="#sampling-args" title="Permalink to this headline">¶</a></h2>
+<p>As a simple example, we will first simulate sample
+data with  <a class="reference external" href="https://tskit.dev/msprime/docs/stable/">msprime</a>.
+We will then run <cite>arginfer</cite> on the simulated dataset.</p>
+<p>The following code simulates a tree sequence and the sequences for a sample size of <cite>10</cite> and sequence
+length of <cite>1e5</cite>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">msprime</span>
-
-<span class="n">sample_ts</span> <span class="o">=</span> <span class="n">msprime</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sample_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">Ne</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
-                                        <span class="n">length</span><span class="o">=</span><span class="mf">1e4</span><span class="p">,</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="n">ts_full</span> <span class="o">=</span> <span class="n">msprime</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sample_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">Ne</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span>
+                                        <span class="n">length</span><span class="o">=</span><span class="mf">1e5</span><span class="p">,</span>
                                         <span class="n">mutation_rate</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
                                         <span class="n">recombination_rate</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
+                                        <span class="n">record_full_arg</span><span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
                                         <span class="n">random_seed</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">sample_ts</span><span class="o">.</span><span class="n">num_trees</span><span class="p">,</span>
-      <span class="n">sample_ts</span><span class="o">.</span><span class="n">num_nodes</span><span class="p">)</span>
+<span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span><span class="o">+</span><span class="s2">&quot;/out&quot;</span><span class="p">)</span>
+<span class="n">ts_full</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span><span class="o">+</span><span class="s2">&quot;/out/&quot;</span><span class="o">+</span><span class="s2">&quot;ts_full.args&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The output of this code is:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span>
+<p>The output of this code is a <code class="docutils literal notranslate"><span class="pre">tree</span> <span class="pre">sequence</span></code> stored in &quot;out/&quot; directory under the name of <cite>ts_full.args</cite>.</p>
+<p>Next,  the following command can
+be used to run 200 MCMC iterations with burn-in 5 and retaining every 10 samples (thinning intervals = 10).
+Also <code class="docutils literal notranslate"><span class="pre">sample_size</span> <span class="pre">=</span> <span class="pre">n</span> <span class="pre">=</span> <span class="pre">10</span></code> is the number of sequences each <code class="docutils literal notranslate"><span class="pre">seq_length</span> <span class="pre">=</span> <span class="pre">L</span> <span class="pre">=</span> <span class="pre">1e5</span></code> in length evolving in
+a population of effective size <code class="docutils literal notranslate"><span class="pre">Ne</span> <span class="pre">=</span> <span class="pre">5000</span></code>, with
+mutation rate <code class="docutils literal notranslate"><span class="pre">1e-8</span></code> mutations/generation/site and recombination rate <code class="docutils literal notranslate"><span class="pre">1e-8</span></code>
+recombinations/generation/site.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">arginfer</span>
+<span class="n">arginfer</span><span class="o">.</span><span class="n">infer_sim</span><span class="p">(</span>
+    <span class="n">ts_full</span> <span class="o">=</span> <span class="s2">&quot;out/ts_full.args&quot;</span><span class="p">,</span>     <span class="c1"># path to simulated ts</span>
+    <span class="n">sample_size</span> <span class="o">=</span><span class="mi">10</span><span class="p">,</span>            <span class="c1"># sample size</span>
+    <span class="n">iteration</span><span class="o">=</span> <span class="mi">200</span><span class="p">,</span>              <span class="c1"># number of mcmc iterations</span>
+    <span class="n">thin</span><span class="o">=</span> <span class="mi">10</span><span class="p">,</span>                    <span class="c1"># thinning interval, retaining everry kth sample</span>
+    <span class="n">burn</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>                     <span class="c1"># burn-in period to discard</span>
+    <span class="n">Ne</span> <span class="o">=</span><span class="mi">5000</span><span class="p">,</span>                   <span class="c1"># effective population size</span>
+    <span class="n">seq_length</span><span class="o">=</span> <span class="mf">1e5</span><span class="p">,</span>            <span class="c1"># sequence length in bases</span>
+    <span class="n">mutation_rate</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>         <span class="c1"># mutation rate per site per generation</span>
+    <span class="n">recombination_rate</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>    <span class="c1"># recombination rate per site per generation</span>
+    <span class="n">outpath</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span><span class="o">+</span><span class="s2">&quot;/output&quot;</span><span class="p">,</span>   <span class="c1"># output path</span>
+    <span class="n">plot</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span>                    <span class="c1"># plot traces</span>
 </pre></div>
 </div>
+<p>or equivalently in terminal:</p>
+<div class="highlight-RST notranslate"><div class="highlight"><pre><span></span>arginfer infer --tsfull &quot;out/ts_full.args&quot; \
+    -I 200 --thin 10 -b 5 \
+    -n 10 -L 1e5 --Ne 5000 \
+    -r 1e-8 -mu 1e-8 \
+    -O output \
+    --plot
+</pre></div>
+</div>
+<p>The output of the above command is as follows:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">summary.h5</span></code>: A summary of some ARG properties recorded in a <code class="docutils literal notranslate"><span class="pre">pandas</span> <span class="pre">dataframe</span></code> with columns:</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;likelihood&#39;</span><span class="p">,</span> <span class="s1">&#39;prior&#39;</span><span class="p">,</span> <span class="s2">&quot;posterior&quot;</span><span class="p">,</span>
+                                         <span class="s1">&#39;ancestral recomb&#39;</span><span class="p">,</span> <span class="s1">&#39;non ancestral recomb&#39;</span><span class="p">,</span>
+                                            <span class="s1">&#39;branch length&#39;</span><span class="p">))</span>
+</pre></div>
+</div>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">.arg</span></code> file: The sampled ARGs, which are pickled <code class="docutils literal notranslate"><span class="pre">ATS</span></code> objects.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>See here for more information on how manipulate these files (TODO).</p></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">arginfer*.pdf</span></code>: if <code class="docutils literal notranslate"><span class="pre">plot=True</span></code>, this <code class="docutils literal notranslate"><span class="pre">pdf</span></code> file will be generated which contains trace plots for the <code class="docutils literal notranslate"><span class="pre">log(posterior)</span></code>, <code class="docutils literal notranslate"><span class="pre">ARG</span> <span class="pre">total</span> <span class="pre">branch</span> <span class="pre">length</span></code>, <code class="docutils literal notranslate"><span class="pre">number</span> <span class="pre">of</span> <span class="pre">ancestral</span> <span class="pre">recombination</span></code>, and <code class="docutils literal notranslate"><span class="pre">number</span> <span class="pre">of</span> <span class="pre">non-ancestral</span> <span class="pre">recombination</span></code>.</p></li>
+</ul>
+</div>
+<div class="section" id="manipulating-arginfer-outputs">
+<h2>Manipulating <code class="docutils literal notranslate"><span class="pre">arginfer</span></code> outputs<a class="headerlink" href="#manipulating-arginfer-outputs" title="Permalink to this headline">¶</a></h2>
 </div>
 </div>
 
