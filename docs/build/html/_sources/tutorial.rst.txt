@@ -78,10 +78,12 @@ The output of the above command is as follows:
 
     *  See here for more information on how manipulate these files (TODO).
 
-* ``arginfer*.pdf``: if ``plot=True``, this ``pdf`` file will be generated which contains trace plots for the ``log(posterior)``, ``ARG total branch length``, ``number of ancestral recombination``, and ``number of non-ancestral recombination``.
+*  | ``arginfer*.pdf``: if ``plot=True``, this `pdf` file will be generated which contains trace plots for
+   |  the log(posterior), ARG total branch length, number of ancestral recombinations,
+   |  and number of non-ancestral recombinations.
 
 
 *********************************
-Manipulating ``arginfer`` outputs
+Working with ``arginfer`` outputs
 *********************************
 
