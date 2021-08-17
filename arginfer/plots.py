@@ -91,11 +91,11 @@ class Trace(Figure):
             ", n= " + str(int(self.data.setup[3]))+", Ne = "+ str(int(self.data.setup[6]/1000))  +\
                      "K,\n L= "+ str(int(self.data.setup[4]/1000))+\
             "K, m= " + str(int(self.data.setup[5]))+ ", accept= "+ str(self.data.setup[9])+\
-            ", CPU time = " + str(int(self.data.setup[10]/60))+ " min\n" +
-                     "detail accept: ["+ str(self.data.setup[11]) +", " + str(self.data.setup[12])+ ", " +
-                     str(self.data.setup[13]) + ", "+ str(self.data.setup[14])+ ", "
-                     + str(self.data.setup[15])+ " ,"+ str(self.data.setup[16]) +\
-                     " ,"+ str(self.data.setup[17])+"]")
+            ", CPU time = " + str(int(self.data.setup[10]/60))+ " min\n")# +
+                     # "detail accept: ["+ str(self.data.setup[11]) +", " + str(self.data.setup[12])+ ", " +
+                     # str(self.data.setup[13]) + ", "+ str(self.data.setup[14])+ ", "
+                     # + str(self.data.setup[15])+ " ,"+ str(self.data.setup[16]) +\
+                     # " ,"+ str(self.data.setup[17])+"]")
         self.save(figure_name="arginfertrace" + time.strftime("%Y%m%d-%H%M%S"))
         plt.show()
 

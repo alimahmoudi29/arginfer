@@ -21,7 +21,7 @@ length of `1e5`.
     ts_full = msprime.simulate(sample_size=10, Ne=5000,
                                             length=1e5,
                                             mutation_rate=1e-8,
-                                            recombination_rate=1e-8,
+                                            recombination_rate=0.5e-8,
                                             record_full_arg= True,
                                             random_seed=2)
     os.makedirs(os.getcwd()+"/out")
@@ -34,7 +34,7 @@ Next,  the following command can
 be used to run 200 MCMC iterations with burn-in 5 and retaining every 10 samples (thinning intervals = 10).
 Also ``sample_size = n = 10`` is the number of sequences each ``seq_length = L = 1e5`` in length evolving in
 a population of effective size ``Ne = 5000``, with
-mutation rate ``1e-8`` mutations/generation/site and recombination rate ``1e-8``
+mutation rate ``1e-8`` mutations/generation/site and recombination rate ``0.5e-8``
 recombinations/generation/site.
 
 .. code-block:: python
@@ -49,7 +49,7 @@ recombinations/generation/site.
         Ne =5000,                   # effective population size
         seq_length= 1e5,            # sequence length in bases
         mutation_rate=1e-8,         # mutation rate per site per generation
-        recombination_rate=1e-8,    # recombination rate per site per generation
+        recombination_rate=0.5e-8,    # recombination rate per site per generation
         outpath = os.getcwd()+"/output",   # output path
         plot = True)                    # plot traces
 
@@ -60,7 +60,7 @@ or equivalently in terminal:
     arginfer infer --tsfull "out/ts_full.args" \
         -I 200 --thin 10 -b 5 \
         -n 10 -L 1e5 --Ne 5000 \
-        -r 1e-8 -mu 1e-8 \
+        -r 0.5e-8 -mu 1e-8 \
         -O output \
         --plot
 

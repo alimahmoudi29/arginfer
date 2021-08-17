@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Tutorial &mdash; arginfer 0.1.dev80+gf4bcddf.d20210325 documentation</title>
+  <title>Tutorial &mdash; arginfer 0.1.dev81+g3ddeb44.d20210817 documentation</title>
   
 
   
@@ -172,7 +172,7 @@ length of <cite>1e5</cite>.</p>
 <span class="n">ts_full</span> <span class="o">=</span> <span class="n">msprime</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sample_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">Ne</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span>
                                         <span class="n">length</span><span class="o">=</span><span class="mf">1e5</span><span class="p">,</span>
                                         <span class="n">mutation_rate</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
-                                        <span class="n">recombination_rate</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
+                                        <span class="n">recombination_rate</span><span class="o">=</span><span class="mf">0.5e-8</span><span class="p">,</span>
                                         <span class="n">record_full_arg</span><span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
                                         <span class="n">random_seed</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span><span class="o">+</span><span class="s2">&quot;/out&quot;</span><span class="p">)</span>
@@ -184,7 +184,7 @@ length of <cite>1e5</cite>.</p>
 be used to run 200 MCMC iterations with burn-in 5 and retaining every 10 samples (thinning intervals = 10).
 Also <code class="docutils literal notranslate"><span class="pre">sample_size</span> <span class="pre">=</span> <span class="pre">n</span> <span class="pre">=</span> <span class="pre">10</span></code> is the number of sequences each <code class="docutils literal notranslate"><span class="pre">seq_length</span> <span class="pre">=</span> <span class="pre">L</span> <span class="pre">=</span> <span class="pre">1e5</span></code> in length evolving in
 a population of effective size <code class="docutils literal notranslate"><span class="pre">Ne</span> <span class="pre">=</span> <span class="pre">5000</span></code>, with
-mutation rate <code class="docutils literal notranslate"><span class="pre">1e-8</span></code> mutations/generation/site and recombination rate <code class="docutils literal notranslate"><span class="pre">1e-8</span></code>
+mutation rate <code class="docutils literal notranslate"><span class="pre">1e-8</span></code> mutations/generation/site and recombination rate <code class="docutils literal notranslate"><span class="pre">0.5e-8</span></code>
 recombinations/generation/site.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">arginfer</span>
 <span class="n">arginfer</span><span class="o">.</span><span class="n">infer_sim</span><span class="p">(</span>
@@ -196,7 +196,7 @@ recombinations/generation/site.</p>
     <span class="n">Ne</span> <span class="o">=</span><span class="mi">5000</span><span class="p">,</span>                   <span class="c1"># effective population size</span>
     <span class="n">seq_length</span><span class="o">=</span> <span class="mf">1e5</span><span class="p">,</span>            <span class="c1"># sequence length in bases</span>
     <span class="n">mutation_rate</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>         <span class="c1"># mutation rate per site per generation</span>
-    <span class="n">recombination_rate</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>    <span class="c1"># recombination rate per site per generation</span>
+    <span class="n">recombination_rate</span><span class="o">=</span><span class="mf">0.5e-8</span><span class="p">,</span>    <span class="c1"># recombination rate per site per generation</span>
     <span class="n">outpath</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span><span class="o">+</span><span class="s2">&quot;/output&quot;</span><span class="p">,</span>   <span class="c1"># output path</span>
     <span class="n">plot</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span>                    <span class="c1"># plot traces</span>
 </pre></div>
@@ -205,7 +205,7 @@ recombinations/generation/site.</p>
 <div class="highlight-RST notranslate"><div class="highlight"><pre><span></span>arginfer infer --tsfull &quot;out/ts_full.args&quot; \
     -I 200 --thin 10 -b 5 \
     -n 10 -L 1e5 --Ne 5000 \
-    -r 1e-8 -mu 1e-8 \
+    -r 0.5e-8 -mu 1e-8 \
     -O output \
     --plot
 </pre></div>

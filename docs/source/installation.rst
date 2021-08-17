@@ -6,11 +6,11 @@ Installation
 
 To install ``arginfer`` simply run::
 
-    $ pip install -i https://test.pypi.org/simple/ arginfer
+    $ pip install arginfer
 
 or::
 
-    $ python3 -m pip install arginfer --user
+    $ python3 -m pip install arginfer
 
 Python 3.6, or a more recent version, is required. The software has been tested
 on MacOSX.

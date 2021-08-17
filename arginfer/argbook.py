@@ -770,6 +770,19 @@ class ARG(object):
             count +=1
         return tot_tmrca
 
+    def mean_tmrca(self, sequence_length):
+        '''return a value for tmrca of the ARG, which is the mean over all trmrcas'''
+        break_points = self.breakpoints(only_ancRec= True, set= True)
+        break_points.add(0)
+        break_points.add(sequence_length)
+        tmrca_list = []
+        count =0
+        while count < len(break_points)-1:
+            x_tmrca= self.tmrca(break_points[count])
+            tmrca_list.append(x_tmrca*(int(break_points[count+1])-int(break_points[count])))
+            count += 1
+        return np.mean(tmrca_list)
+
     def allele_age(self):
         ''':return a pd df with four columns:
             1. site: the genomic position of the SNP
