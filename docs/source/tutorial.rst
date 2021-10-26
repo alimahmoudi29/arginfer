@@ -60,7 +60,7 @@ or equivalently in terminal:
 
 .. code-block:: RST
 
-    arginfer infer --tsfull "out/ts_full.args" \
+    arginfer infer --tsfull "data/ts_full.args" \
         -I 200 --thin 10 -b 5 \
         -n 10 -L 1e5 --Ne 5000 \
         -r 0.5e-8 -mu 1e-8 \
