@@ -24,11 +24,14 @@ length of `1e5`.
                                             recombination_rate=0.5e-8,
                                             record_full_arg= True,
                                             random_seed=2)
-    os.makedirs(os.getcwd()+"/out")
-    ts_full.dump(os.getcwd()+"/out/"+"ts_full.args")
+    os.makedirs(os.getcwd()+"/data")
+    ts_full.dump(os.getcwd()+"/data/"+"ts_full.args")
 
 
-The output of this code is a ``tree sequence`` stored in "out/" directory under the name of `ts_full.args`.
+The output of this code is a ``tree sequence`` stored in "data/" directory under the name of `ts_full.args`.
+
+Alternatively, you can use the already simulated tree sequence (`ts_full.args`) stored in 'data/' directory
+on the project's GitHub page.
 
 Next,  the following command can
 be used to run 200 MCMC iterations with burn-in 5 and retaining every 10 samples (thinning intervals = 10).
@@ -41,7 +44,7 @@ recombinations/generation/site.
 
     import arginfer
     arginfer.infer_sim(
-        ts_full = "out/ts_full.args",     # path to simulated ts
+        ts_full = "data/ts_full.args",     # path to simulated ts
         sample_size =10,            # sample size
         iteration= 200,              # number of mcmc iterations
         thin= 10,                    # thinning interval, retaining everry kth sample
