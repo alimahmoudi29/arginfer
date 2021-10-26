@@ -31,7 +31,7 @@ length of `1e5`.
 The output of this code is a ``tree sequence`` stored in "data/" directory under the name of `ts_full.args`.
 
 Alternatively, you can use the already simulated tree sequence (`ts_full.args`) stored in 'data/' directory
-on the project's GitHub page.
+on the project's GitHub page `GitHub page <https://github.com/alimahmoudi29/arginfer/tree/master/data>`_.
 
 Next,  the following command can
 be used to run 200 MCMC iterations with burn-in 5 and retaining every 10 samples (thinning intervals = 10).
