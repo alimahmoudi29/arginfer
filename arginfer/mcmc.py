@@ -2884,26 +2884,20 @@ class MCMC(object):
                 that in the transition probabilities
         '''
         if len(self.arg.rec) == 0:
-            w[1] = 0#remove rec
             w[4] = 0# adjust breakpoint
         ind = random.choices([i for i in range(len(w))], w)[0]
         if ind == 0:
-            # print("------spr")
             self.spr()
         elif ind == 1:
-            # print("-----remove")
-            self.remove_recombination()
+            if len(self.arg.rec) != 0:
+                self.remove_recombination()
         elif ind == 2:
-            # print("---------add")
             self.add_recombination()
         elif ind == 3:
-            # print("---------adjust_times")
             self.adjust_times()
         elif ind == 4:
-            # print("---------adjust breakpoint")
             self.adjust_breakpoint()
-        elif ind == 5:#kuhner
-            # print("---------kuhner")
+        elif ind == 5:
             self.kuhner()
         elif ind == 6:
             # print("---------update_parameters")
@@ -2928,7 +2922,7 @@ class MCMC(object):
         #----test
         for it in tqdm(range(iteration), ncols=100, ascii=False):#
         # while it < iteration:
-            self.run_transition(w = [0, 1, 1, 6, 1, 6, 0])#[1, 1, 1, 5, 1, 4, 0][0, 1, 1, 6, 1, 6, 0]
+            self.run_transition(w = [0, 1, 1, 5, 1, 5, 0])#[1, 1, 1, 5, 1, 4, 0][0, 1, 1, 6, 1, 6, 0]
             if self.accept:
                 accepted += 1
             if it > burn and it % thin == 0:
@@ -3093,6 +3087,5 @@ def infer_real(
     pass
 
 if __name__ == "__main__":
-    pass
     mcmc = MCMC()
     mcmc.run(200, 1, 0, verify=False)

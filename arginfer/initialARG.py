@@ -350,7 +350,7 @@ class Initial(object):
         assert self.number_of_links == 0
 
 def test_run():
-    recombination_rate=1e-8
+    recombination_rate=.5e-8
     mutation_rate=1e-8
     Ne= 5000
     sample_size = 5
